@@ -20,6 +20,7 @@ public:
 
     // Check whether a key corresponding to a given address is present in the store.
     virtual bool HaveKey(const CBitcoinAddress &address) const =0;
+    virtual bool RemoveKey(const CBitcoinAddress &address) =0;
     virtual bool GetKey(const CBitcoinAddress &address, CKey& keyOut) const 
     {
         CSecret vchSecret;
@@ -68,6 +69,7 @@ public:
             result = (mapKeys.count(address) > 0);
         return result;
     }
+    bool RemoveKey(const CBitcoinAddress &address);
     void GetKeys(std::set<CBitcoinAddress> &setAddress) const
     {
         setAddress.clear();
@@ -156,6 +158,7 @@ public:
     virtual bool AddCryptedKey(const std::vector<unsigned char> &vchPubKey, const std::vector<unsigned char> &vchCryptedSecret);
     std::vector<unsigned char> GenerateNewKey();
     bool AddKey(const CKey& key);
+    bool RemoveKey(const CBitcoinAddress &address);
     bool HaveKey(const CBitcoinAddress &address) const
     {
         CRITICAL_BLOCK(cs_KeyStore)

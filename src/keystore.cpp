@@ -77,6 +77,13 @@ bool CCryptoKeyStore::SetCrypted()
     return true;
 }
 
+bool CBasicKeyStore::RemoveKey(const CBitcoinAddress& address)
+{
+    CRITICAL_BLOCK(cs_KeyStore)
+        mapKeys.erase(address);
+    return true;
+}
+
 std::vector<unsigned char> CCryptoKeyStore::GenerateNewKey()
 {
     RandAddSeedPerfmon();
@@ -130,6 +137,17 @@ bool CCryptoKeyStore::AddKey(const CKey& key)
 
         if (!AddCryptedKey(key.GetPubKey(), vchCryptedSecret))
             return false;
+    }
+    return true;
+}
+
+bool CCryptoKeyStore::RemoveKey(const CBitcoinAddress& address)
+{
+    CRITICAL_BLOCK(cs_KeyStore)
+    {
+        if (!IsCrypted())
+            return CBasicKeyStore::RemoveKey(address);
+        mapCryptedKeys.erase(address);
     }
     return true;
 }
