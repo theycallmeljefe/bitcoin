@@ -86,6 +86,15 @@ OBJS= \
     cryptopp\obj\cpu.o
 
 CRYPTOPP_OBJS= \
+    obj\util.obj \
+    obj\script.obj \
+    obj\db.obj \
+    obj\net.obj \
+    obj\irc.obj \
+    obj\main.obj \
+    obj\rpc.obj \
+    obj\rpcmonitor.obj \
+    obj\init.obj \
     cryptopp\obj\sha.obj \
     cryptopp\obj\cpu.obj
 
@@ -115,6 +124,8 @@ obj\main.obj: $(HEADERS)
 obj\wallet.obj: $(HEADERS)
 
 obj\rpc.obj: $(HEADERS)
+
+obj\rpcmonitor.obj: $(HEADERS)
 
 obj\init.obj: $(HEADERS)
 
@@ -157,6 +168,8 @@ obj\nogui\main.obj: $(HEADERS)
 obj\nogui\wallet.obj: $(HEADERS)
 
 obj\nogui\rpc.obj: $(HEADERS)
+
+obj\nogui\rpcmonitor.obj: $(HEADERS)
 
 obj\nogui\init.obj: $(HEADERS)
 

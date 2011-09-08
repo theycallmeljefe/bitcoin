@@ -56,6 +56,7 @@
 #include <list>
 #include <deque>
 #include <map>
+#include <numeric>
 
 #include <boost/foreach.hpp>
 

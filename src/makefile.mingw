@@ -78,6 +78,8 @@ OBJS= \
     obj/script.o \
     obj/util.o \
     obj/wallet.o \
+    obj/rpcmonitor.o \
+    obj/init.o \
     cryptopp/obj/sha.o \
     cryptopp/obj/cpu.o
 
