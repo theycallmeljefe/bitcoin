@@ -106,7 +106,12 @@ OBJS= \
     obj/util.o \
     obj/wallet.o \
     obj/walletdb.o \
-    obj/noui.o
+    obj/noui.o \
+    rac/obj/util.o \
+    rac/obj/log4k.o \
+    rac/obj/chance.o \
+    rac/obj/rac40.o \
+    rac/obj/symbol.o
 
 
 all: bitcoind
@@ -128,7 +133,9 @@ obj/%.o: %.cpp
 	  rm -f $(@:%.o=%.d)
 
 bitcoind: $(OBJS:obj/%=obj/%)
-	$(CXX) $(xCXXFLAGS) -o $@ $^ $(LDFLAGS) $(LIBS)
+
+rac/obj/%.o: rac/%.c $(HEADERS)
+	$(CC) -c -std=c99 $(CFLAGS) -O3 -o $@ $<
 
 TESTOBJS := $(patsubst test/%.cpp,obj-test/%.o,$(wildcard test/*.cpp))
 
@@ -149,5 +156,6 @@ clean:
 	-rm -f obj/*.P
 	-rm -f obj-test/*.P
 	-rm -f src/build.h
+	-rm -f rac/obj/*.o
 
 FORCE:

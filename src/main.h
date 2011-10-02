@@ -101,6 +101,8 @@ unsigned int ComputeMinWork(unsigned int nBase, int64 nTime);
 int GetNumBlocksOfPeers();
 bool IsInitialBlockDownload();
 std::string GetWarnings(std::string strFor);
+void DumpCompressed(void);
+
 
 
 
