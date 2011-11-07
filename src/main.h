@@ -103,6 +103,7 @@ int GetTotalBlocksEstimate();
 int GetNumBlocksOfPeers();
 bool IsInitialBlockDownload();
 std::string GetWarnings(std::string strFor);
+bool RetrieveTransaction(const uint256 &txid, CTransaction &tx);
 
 
 

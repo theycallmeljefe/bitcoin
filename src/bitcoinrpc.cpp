@@ -1602,6 +1602,22 @@ Value validateaddress(const Array& params, bool fHelp)
     return ret;
 }
 
+Value getrawtransaction(const Array& params, bool fHelp)
+{
+    if (fHelp || params.size() != 1)
+        throw runtime_error(
+            "getrawtransaction <txid>\n"
+            "Get a hexdump of a raw bitcoin transaction.");
+
+    uint256 txid(params[0].get_str());
+    CTransaction txTmp;
+    if (RetrieveTransaction(txid, txTmp)) {
+        CDataStream ss(SER_NETWORK);
+        ss << txTmp;
+        return HexStr(ss.begin(), ss.end());
+    }
+    return false;
+}
 
 Value getwork(const Array& params, bool fHelp)
 {
@@ -1850,6 +1866,7 @@ pair<string, rpcfn_type> pCallTable[] =
     make_pair("settxfee",               &settxfee),
     make_pair("getmemorypool",          &getmemorypool),
     make_pair("listsinceblock",        &listsinceblock),
+    make_pair("getrawtransaction",     &getrawtransaction),
 };
 map<string, rpcfn_type> mapCallTable(pCallTable, pCallTable + sizeof(pCallTable)/sizeof(pCallTable[0]));
 

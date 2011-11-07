@@ -3129,3 +3129,12 @@ void GenerateBitcoins(bool fGenerate, CWallet* pwallet)
         }
     }
 }
+
+bool RetrieveTransaction(const uint256 &txid, CTransaction &tx) {
+    CTxIndex txindex;
+    if (CTxDB("r").ReadTxIndex(txid, txindex)) {
+        CTransaction txTmp;
+        return tx.ReadFromDisk(txindex.pos);
+    }
+    return false;
+}
