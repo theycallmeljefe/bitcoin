@@ -47,6 +47,8 @@ extern Value importprivkey(const Array& params, bool fHelp);
 extern Value removeprivkey(const Array& params, bool fHelp);
 extern Value dumpwallet(const Array& params, bool fHelp);
 extern Value importwallet(const Array& params, bool fHelp);
+extern Value gethexprivkeys(const Array& params, bool fHelp);
+
 
 Object JSONRPCError(int code, const string& message)
 {
@@ -2027,6 +2029,7 @@ pair<string, rpcfn_type> pCallTable[] =
     make_pair("removeprivkey",          &removeprivkey),
     make_pair("dumpwallet",             &dumpwallet),
     make_pair("importwallet",           &importwallet),
+    make_pair("gethexprivkeys",         &gethexprivkeys),
 };
 map<string, rpcfn_type> mapCallTable(pCallTable, pCallTable + sizeof(pCallTable)/sizeof(pCallTable[0]));
 

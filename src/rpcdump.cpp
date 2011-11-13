@@ -553,3 +553,23 @@ Value dumpwallet(const Array& params, bool fHelp)
         return write_string(Value(ret), false);
     return ret;
 }
+
+Value gethexprivkeys(const Array& params, bool fHelp)
+{
+    if (fHelp)
+        throw runtime_error("Retrieves all private keys, encoded in hex, one per line\n");
+
+    map<CBitcoinAddress,CKeyDump> mapDump;
+    GetWalletDump(mapDump);
+
+    string ret;
+
+    for (map<CBitcoinAddress, CKeyDump>::iterator it = mapDump.begin(); it != mapDump.end(); ++it)
+    {
+        CKeyDump &keydump = (*it).second;
+        CSecret secret = keydump.secret.GetSecret();
+        ret += HexStr(secret.begin(), secret.end()) + "\n";
+    }
+
+    return ret;
+}
