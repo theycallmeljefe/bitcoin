@@ -1461,7 +1461,7 @@ bool CBlock::AcceptBlock()
         return DoS(100, error("AcceptBlock() : incorrect proof of work"));
 
     // Check timestamp against prev
-    if (GetBlockTime() <= pindexPrev->GetMedianTimePast())
+    if (GetBlockTime() <= pindexPrev->GetMedianTimePast(nHeight, f))
         return error("AcceptBlock() : block's timestamp is too early");
 
     // Check that all transactions are finalized
@@ -3011,7 +3011,7 @@ CBlock* CreateNewBlock(CReserveKey& reservekey)
     // Fill in header
     pblock->hashPrevBlock  = pindexPrev->GetBlockHash();
     pblock->hashMerkleRoot = pblock->BuildMerkleTree();
-    pblock->nTime          = max(pindexPrev->GetMedianTimePast()+1, GetAdjustedTime());
+    pblock->nTime          = max(pindexPrev->GetMedianTimePast(pindexPrev->nHeight+1)+1, GetAdjustedTime());
     pblock->nBits          = GetNextWorkRequired(pindexPrev);
     pblock->nNonce         = 0;
 
@@ -3261,7 +3261,7 @@ void static BitcoinMiner(CWallet *pwallet)
                 break;
 
             // Update nTime every few seconds
-            pblock->nTime = max(pindexPrev->GetMedianTimePast()+1, GetAdjustedTime());
+            pblock->nTime = max(pindexPrev->GetMedianTimePast(pindexPrev->nHeight+1, true)+1, GetAdjustedTime());
             nBlockTime = ByteReverse(pblock->nTime);
         }
     }

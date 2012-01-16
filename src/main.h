@@ -1107,7 +1107,7 @@ public:
 
     enum { nMedianTimeSpan=11 };
 
-    int64 GetMedianTimePast() const
+    int64 GetMedianTimePast(int nHeight, bool fStrict = false) const
     {
         int64 pmedian[nMedianTimeSpan];
         int64* pbegin = &pmedian[nMedianTimeSpan];
@@ -1117,8 +1117,18 @@ public:
         for (int i = 0; i < nMedianTimeSpan && pindex; i++, pindex = pindex->pprev)
             *(--pbegin) = pindex->GetBlockTime();
 
-        std::sort(pbegin, pend);
-        return pbegin[(pend - pbegin)/2];
+        // fix the timejacking problem: at multiple-of-2016 blocks, we do not
+        // clamp blocks to [med(past 11 blocks)+1..now+7200] but further to
+        // [max(past 11 blocks)+1..now+7200]. This is backward compatible, and
+        // prevents arbitrary time lapses betwee blocks 2016*N and 2016*N+1
+        // see http://sourceforge.net/mailarchive/forum.php?thread_name=20111107154319.GA9455%40ulyssis.org&forum_name=bitcoin-development
+        if ((nHeight % 2016) == 0 && fStrict)
+            return std::max_element(pbegin, pend);
+        else
+        {
+            std::sort(pbegin, pend);
+            return pbegin[(pend - pbegin)/2];
+        }
     }
 
     int64 GetMedianTime() const
