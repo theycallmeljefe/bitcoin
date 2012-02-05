@@ -132,7 +132,7 @@ obj/%.o: %.cpp
 	      -e '/^$$/ d' -e 's/$$/ :/' < $(@:%.o=%.d) >> $(@:%.o=%.P); \
 	  rm -f $(@:%.o=%.d)
 
-bitcoind: $(OBJS:obj/%=obj/%)
+bitcoind: $(OBJS:obj/%=obj/%) $(OBJS:rac/obj/%=rac/obj/%)
 	$(CXX) $(xCXXFLAGS) -o $@ $^ $(LDFLAGS) $(LIBS)
 
 rac/obj/%.o: rac/%.c $(HEADERS)
