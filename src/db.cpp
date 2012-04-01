@@ -883,6 +883,7 @@ int CWalletDB::LoadWallet(CWallet* pwallet)
     int nFileVersion = 0;
     vector<uint256> vWalletUpgrade;
     bool fIsEncrypted = false;
+    bool fRecovery = GetBoolArg("-recovery", false);
 
     //// todo: shouldn't we catch exceptions and try to recover and continue?
     {
@@ -989,12 +990,13 @@ int CWalletDB::LoadWallet(CWallet* pwallet)
                     if (key.GetPubKey() != vchPubKey)
                     {
                         printf("Error reading wallet database: CPrivKey pubkey inconsistency\n");
-                        return DB_CORRUPT;
+                        if (!fRecovery)
+                            return DB_CORRUPT;
                     }
-                    if (!key.IsValid())
-                    {
+                    if (key.Recover()) {
                         printf("Error reading wallet database: invalid CPrivKey\n");
-                        return DB_CORRUPT;
+                        if (!fRecovery)
+                            return DB_CORRUPT;
                     }
                 }
                 else
@@ -1006,18 +1008,20 @@ int CWalletDB::LoadWallet(CWallet* pwallet)
                     if (key.GetPubKey() != vchPubKey)
                     {
                         printf("Error reading wallet database: CWalletKey pubkey inconsistency\n");
-                        return DB_CORRUPT;
+                        if (!fRecovery)
+                            return DB_CORRUPT;
                     }
-                    if (!key.IsValid())
-                    {
+                    if (!key.Recover()) {
                         printf("Error reading wallet database: invalid CWalletKey\n");
-                        return DB_CORRUPT;
+                        if (!fRecovery)
+                            return DB_CORRUPT;
                     }
                 }
                 if (!pwallet->LoadKey(key))
                 {
                     printf("Error reading wallet database: LoadKey failed\n");
-                    return DB_CORRUPT;
+                    if (!fRecovery)
+                        return DB_CORRUPT;
                 }
             }
             else if (strType == "mkey")

@@ -84,6 +84,7 @@ bool CWallet::Unlock(const SecureString& strWalletPassphrase)
                 return false;
             if (!crypter.Decrypt(pMasterKey.second.vchCryptedKey, vMasterKey))
                 return false;
+            MarkDirty();
             if (CCryptoKeyStore::Unlock(vMasterKey))
                 return true;
         }
@@ -107,6 +108,7 @@ bool CWallet::ChangeWalletPassphrase(const SecureString& strOldWalletPassphrase,
                 return false;
             if (!crypter.Decrypt(pMasterKey.second.vchCryptedKey, vMasterKey))
                 return false;
+            MarkDirty();
             if (CCryptoKeyStore::Unlock(vMasterKey))
             {
                 int64 nStartTime = GetTimeMillis();
@@ -260,6 +262,7 @@ bool CWallet::EncryptWallet(const SecureString& strWalletPassphrase)
         }
 
         Lock();
+        MarkDirty();
         Unlock(strWalletPassphrase);
         NewKeyPool();
         Lock();

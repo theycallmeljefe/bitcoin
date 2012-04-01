@@ -312,7 +312,8 @@ public:
         return true;
     }
 
-    bool IsValid()
+    // returns whether recovery was necessary
+    bool Recover()
     {
         if (!fSet)
             return false;
@@ -321,7 +322,9 @@ public:
         CSecret secret = GetSecret(fCompr);
         CKey key2;
         key2.SetSecret(secret, fCompr);
-        return GetPubKey() == key2.GetPubKey();
+        bool fOk = (GetPubKey() == key2.GetPubKey());
+        *this = key2;
+        return (!fOk);
     }
 };
 
