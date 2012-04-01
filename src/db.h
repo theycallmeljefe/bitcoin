@@ -20,6 +20,8 @@ class CAddrMan;
 class CBlockLocator;
 class CDiskBlockIndex;
 class CDiskTxPos;
+class CTxData;
+class CBlockData;
 class CMasterKey;
 class COutPoint;
 class CTxIndex;
@@ -265,12 +267,31 @@ public:
 
 
 
+class CChainDB : public CDB
+{
+public:
+    CChainDB(const char* pszMode="r+") : CDB("chain.dat", pszMode)
+    {
+    }
+    bool ReadTxData(uint256 hash, CTxData& txdata);
+    bool WriteTxData(uint256, const CTxData& txdata);
+    bool EraseTxData(uint256);
+
+    bool ReadBlockData(uint256 hash, CBlockData& blockdata);
+    bool WriteBlockData(uint256 hash, const CBlockData& blockdata);
+
+    bool ReadTx(uint256, CTransaction &tx);
+    bool WriteTx(uint256, const CTransaction &tx);
+    bool EraseTx(uint256);
+};
+
 
 /** Access to the transaction database (blkindex.dat) */
 class CTxDB : public CDB
 {
 public:
-    CTxDB(const char* pszMode="r+") : CDB("blkindex.dat", pszMode) { }
+    CChainDB chaindb;
+    CTxDB(const char* pszMode="r+") : CDB("blkindex.dat", pszMode), chaindb(pszMode) { }
 private:
     CTxDB(const CTxDB&);
     void operator=(const CTxDB&);
@@ -339,6 +360,8 @@ public:
         READWRITE(vchPubKey);
     )
 };
+
+
 
 
 
@@ -506,5 +529,6 @@ public:
 
     int LoadWallet(CWallet* pwallet);
 };
+
 
 #endif

@@ -1033,6 +1033,35 @@ private:
 
 
 
+class CBlockData
+{
+public:
+    uint256 hashPrev;
+    unsigned int nTime;
+    unsigned int nBits;
+    unsigned int nNonce;
+    std::vector<uint256> vhashTx;
+
+    IMPLEMENT_SERIALIZE
+    (
+        READWRITE(hashPrev);
+        READWRITE(nTime);
+        READWRITE(nBits);
+        READWRITE(nNonce);
+        READWRITE(vhashTx);
+    )
+};
+
+class CTxData
+{
+public:
+    std::vector<char> vfSpent;
+
+    IMPLEMENT_SERIALIZE
+    (
+        READWRITE(vfSpent);
+    )
+};
 
 
 /** The block chain is a tree shaped structure starting with the

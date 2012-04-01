@@ -483,6 +483,46 @@ bool CTxDB::WriteBestInvalidWork(CBigNum bnBestInvalidWork)
     return Write(string("bnBestInvalidWork"), bnBestInvalidWork);
 }
 
+bool CChainDB::WriteTxData(uint256 hash, const CTxData& txdata)
+{
+    return Write(make_pair(string("td"), hash), txdata);
+}
+
+bool CChainDB::ReadTxData(uint256 hash, CTxData& txdata)
+{
+    return Read(make_pair(string("td"), hash), txdata);
+}
+
+bool CChainDB::WriteBlockData(uint256 hash, const CBlockData& blockdata)
+{
+    return Write(make_pair(string("bd"), hash), blockdata);
+}
+
+bool CChainDB::ReadBlockData(uint256 hash, CBlockData& blockdata)
+{
+    return Read(make_pair(string("bd"), hash), blockdata);
+}
+
+bool CChainDB::EraseTxData(uint256 hash)
+{
+    return Erase(make_pair(string("td"), hash));
+}
+
+bool CChainDB::WriteTx(uint256 hash, const CTransaction& tx)
+{
+    return Write(make_pair(string("tx"), hash), tx);
+}
+
+bool CChainDB::ReadTx(uint256 hash, CTransaction& tx)
+{
+    return Read(make_pair(string("tx"), hash), tx);
+}
+
+bool CChainDB::EraseTx(uint256 hash)
+{
+    return Erase(make_pair(string("tx"), hash));
+}
+
 CBlockIndex static * InsertBlockIndex(uint256 hash)
 {
     if (hash == 0)
