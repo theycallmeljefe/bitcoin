@@ -41,8 +41,6 @@ script: |
   #
   unzip bitcoin-deps-0.0.3.zip
   #
-  find -type f | xargs touch --date="$REFERENCE_DATETIME"
-  #
   cd bitcoin
   mkdir -p $OUTDIR/src
   cp -a . $OUTDIR/src
