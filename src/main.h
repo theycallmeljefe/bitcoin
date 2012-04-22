@@ -76,7 +76,6 @@ extern int64 nTransactionFee;
 
 
 
-
 class CReserveKey;
 class CTxDB;
 class CTxIndex;
@@ -84,10 +83,11 @@ class CTxIndex;
 void RegisterWallet(CWallet* pwalletIn);
 void UnregisterWallet(CWallet* pwalletIn);
 bool ProcessBlock(CNode* pfrom, CBlock* pblock);
-bool CheckDiskSpace(uint64 nAdditionalBytes=0);
-FILE* OpenBlockFile(unsigned int nFile, unsigned int nBlockPos, const char* pszMode="rb");
-FILE* AppendBlockFile(unsigned int& nFileRet);
-bool LoadBlockIndex(bool fAllowNew=true);
+bool CheckDiskSpace(uint64 nAdditionalBytes = 0);
+boost::filesystem::path GetBlockFile(unsigned int& nFile);
+unsigned long GetBlockFileSize(unsigned int& nFile);
+FILE* OpenBlockFile(unsigned int nFile, unsigned int nBlockPos, const char* pszMode = "rb");
+bool LoadBlockIndex(bool fAllowNew = true);
 void PrintBlockTree();
 bool ProcessMessages(CNode* pfrom);
 bool SendMessages(CNode* pto, bool fSendTrickle);
@@ -790,7 +790,7 @@ public:
         return !(a == b);
     }
     int GetDepthInMainChain() const;
- 
+
 };
 
 
@@ -932,34 +932,45 @@ public:
     }
 
 
-    bool WriteToDisk(unsigned int& nFileRet, unsigned int& nBlockPosRet)
+    bool WriteToDisk(bool fNewBlockFile, unsigned int& nCurrentBlockFileRet, unsigned long& nBlockFileFPtrPosRet, unsigned int& nBlockPosRet)
     {
-        // Open history file to append
-        CAutoFile fileout = CAutoFile(AppendBlockFile(nFileRet), SER_DISK, CLIENT_VERSION);
-        if (!fileout)
-            return error("CBlock::WriteToDisk() : AppendBlockFile failed");
+        // Attach block file and pass current block file file-pointer position
+        CAutoFileStream fileBlock(GetBlockFile(nCurrentBlockFileRet), nBlockFileFPtrPosRet, SER_DISK, CLIENT_VERSION);
+
+        if (fNewBlockFile)
+        {
+            printf("CBlock::WriteToDiskStream() : writing new block file %s\n", fileBlock.getFile().c_str());
+
+            // Preallocate disk space for the block file
+            if (!fileBlock.preallocateDiskSpace(MAX_FILESIZE))
+            {
+                printf("CBlock::WriteToDiskStream() : failed to preallocate %dbytes for block file %s\n", MAX_FILESIZE, fileBlock.getFile().c_str());
+                return false;
+            }
+        }
+
+        printf("CBlock::WriteToDiskStream() : working with block file %s (size: %u bytes)\n", fileBlock.getFile().c_str(), GetBlockFileSize(nCurrentBlockFileRet));
+
+        // Open block file to append new blocks
+        if (!fileBlock.open())
+        {
+            printf("CBlock::WriteToDiskStream() : failed to open block file %s\n", fileBlock.getFile().c_str());
+            return false;
+        }
 
         // Write index header
-        unsigned int nSize = fileout.GetSerializeSize(*this);
-        fileout << FLATDATA(pchMessageStart) << nSize;
+        fileBlock << FLATDATA(pchMessageStart) << fileBlock.GetSerializeSize(*this);
+
+        // Save block position (used in the block-index)
+        nBlockPosRet = fileBlock.getFilePtrPos();
 
         // Write block
-        long fileOutPos = ftell(fileout);
-        if (fileOutPos < 0)
-            return error("CBlock::WriteToDisk() : ftell failed");
-        nBlockPosRet = fileOutPos;
-        fileout << *this;
+        fileBlock << *this;
 
-        // Flush stdio buffers and commit to disk before returning
-        fflush(fileout);
-        if (!IsInitialBlockDownload() || (nBestHeight+1) % 500 == 0)
-        {
-#ifdef WIN32
-            _commit(_fileno(fileout));
-#else
-            fsync(fileno(fileout));
-#endif
-        }
+        printf("CBlock::WriteToDiskStream() : Current position in block file after writing block: %d\n", fileBlock.getFilePtrPos());
+
+        // Save block file file-pointer position
+        nBlockFileFPtrPosRet = fileBlock.getFilePtrPos();
 
         return true;
     }

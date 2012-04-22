@@ -55,8 +55,7 @@ int64 nHPSTimerStart;
 
 // Settings
 int64 nTransactionFee = 0;
-
-
+static unsigned int nCurrentBlockFile = 1;
 
 //////////////////////////////////////////////////////////////////////////////
 //
@@ -718,7 +717,7 @@ bool CWalletTx::AcceptWalletTransaction(CTxDB& txdb, bool fCheckInputs)
     return false;
 }
 
-bool CWalletTx::AcceptWalletTransaction() 
+bool CWalletTx::AcceptWalletTransaction()
 {
     CTxDB txdb("r");
     return AcceptWalletTransaction(txdb);
@@ -1679,6 +1678,8 @@ bool CBlock::CheckBlock() const
 
 bool CBlock::AcceptBlock()
 {
+    CTxDB txdb;
+
     // Check for duplicate
     uint256 hash = GetHash();
     if (mapBlockIndex.count(hash))
@@ -1708,14 +1709,50 @@ bool CBlock::AcceptBlock()
     if (!Checkpoints::CheckBlock(nHeight, hash))
         return DoS(100, error("AcceptBlock() : rejected by checkpoint lockin at %d", nHeight));
 
-    // Write block to history file
+    // Check that we have enough disk space for writing the block to disk
     if (!CheckDiskSpace(::GetSerializeSize(*this, SER_DISK, CLIENT_VERSION)))
         return error("AcceptBlock() : out of disk space");
-    unsigned int nFile = -1;
+
+    bool fNewBlockFile = false;
+    unsigned long nBlockFileFPtrPos = 0;
     unsigned int nBlockPos = 0;
-    if (!WriteToDisk(nFile, nBlockPos))
-        return error("AcceptBlock() : WriteToDisk failed");
-    if (!AddToBlockIndex(nFile, nBlockPos))
+
+    // Read block file number
+    if (!txdb.ReadBlockFileNum(nCurrentBlockFile))
+        return error("AcceptBlock() : reading block file number from database failed");
+    // Read block file file-pointer position
+    if (!txdb.ReadBlockFileFPtrPos(nBlockFileFPtrPos))
+        return error("AcceptBlock() : reading block file file-pointer position from database failed");
+
+    // Need to start a new block file
+    if ((nBlockFileFPtrPos + MAX_SIZE) > MAX_FILESIZE)
+    {
+        fNewBlockFile = true;
+        nBlockFileFPtrPos = 0;
+        nCurrentBlockFile++;
+
+        // The new file should not exist, if it does that's an error
+        if (boost::filesystem::exists(GetBlockFile(nCurrentBlockFile)))
+            error("AcceptBlock() : existing block file found, aborting...");
+
+        // Update block file number
+        if (!txdb.WriteBlockFileNum(nCurrentBlockFile))
+            return error("AcceptBlock() : updating block file number in database failed");
+        // Write initial block file file-pointer position
+        if (!txdb.WriteBlockFileFPtrPos(nBlockFileFPtrPos))
+            return error("AcceptBlock() : writing initial block file file-pointer position to database failed");
+    }
+
+    // Write block to block file
+    if (!WriteToDisk(fNewBlockFile, nCurrentBlockFile, nBlockFileFPtrPos, nBlockPos))
+        return error("AcceptBlock() : WriteToDiskStream failed");
+
+    // Update block file file-pointer position
+    if (!txdb.WriteBlockFileFPtrPos(nBlockFileFPtrPos))
+        return error("AcceptBlock() : updating block file file-pointer position in database failed");
+
+    // Add block to block-index
+    if (!AddToBlockIndex(nCurrentBlockFile, nBlockPos))
         return error("AcceptBlock() : AddToBlockIndex failed");
 
     // Relay inventory, but don't relay old inventory during initial block download
@@ -1834,6 +1871,27 @@ bool CheckDiskSpace(uint64 nAdditionalBytes)
     return true;
 }
 
+boost::filesystem::path GetBlockFile(unsigned int& nFile)
+{
+    namespace fs = boost::filesystem;
+
+    char pszBlockFile[12] = "";
+
+    sprintf(pszBlockFile, "blk%04d.dat", nFile);
+
+    return (fs::path(GetDataDir() / fs::path(pszBlockFile)));
+}
+
+unsigned long GetBlockFileSize(unsigned int& nFile)
+{
+    namespace fs = boost::filesystem;
+
+    if (fs::exists(GetBlockFile(nFile)))
+        return (unsigned long)fs::file_size(GetBlockFile(nFile));
+    else
+        return 0;
+}
+
 FILE* OpenBlockFile(unsigned int nFile, unsigned int nBlockPos, const char* pszMode)
 {
     if (nFile == -1)
@@ -1852,29 +1910,6 @@ FILE* OpenBlockFile(unsigned int nFile, unsigned int nBlockPos, const char* pszM
     return file;
 }
 
-static unsigned int nCurrentBlockFile = 1;
-
-FILE* AppendBlockFile(unsigned int& nFileRet)
-{
-    nFileRet = 0;
-    loop
-    {
-        FILE* file = OpenBlockFile(nCurrentBlockFile, 0, "ab");
-        if (!file)
-            return NULL;
-        if (fseek(file, 0, SEEK_END) != 0)
-            return NULL;
-        // FAT32 filesize max 4GB, fseek and ftell max 2GB, so we must stay under 2GB
-        if (ftell(file) < 0x7F000000 - MAX_SIZE)
-        {
-            nFileRet = nCurrentBlockFile;
-            return file;
-        }
-        fclose(file);
-        nCurrentBlockFile++;
-    }
-}
-
 bool LoadBlockIndex(bool fAllowNew)
 {
     if (fTestNet)
@@ -1890,10 +1925,9 @@ bool LoadBlockIndex(bool fAllowNew)
     //
     // Load block index
     //
-    CTxDB txdb("cr");
+    CTxDB txdb("cr+");
     if (!txdb.LoadBlockIndex())
         return false;
-    txdb.Close();
 
     //
     // Init with genesis block
@@ -1943,14 +1977,30 @@ bool LoadBlockIndex(bool fAllowNew)
         assert(block.GetHash() == hashGenesisBlock);
 
         // Start new block file
-        unsigned int nFile;
-        unsigned int nBlockPos;
-        if (!block.WriteToDisk(nFile, nBlockPos))
+        unsigned long nBlockFileFPtrPos = 0;
+        unsigned int nBlockPos = 0;
+
+        // Write initial block file number (nCurrentBlockFile == 1)
+        if (!txdb.WriteBlockFileNum(nCurrentBlockFile))
+            return error("LoadBlockIndex()) : writing block file number to database failed");
+        // Write initial block file file-pointer position
+        if (!txdb.WriteBlockFileFPtrPos(nBlockFileFPtrPos))
+            return error("LoadBlockIndex() : writing initial block file file-pointer position to database failed");
+
+        // Tell WriteToDiskStream this is the Genesis block
+        if (!block.WriteToDisk(true, nCurrentBlockFile, nBlockFileFPtrPos, nBlockPos))
             return error("LoadBlockIndex() : writing genesis block to disk failed");
-        if (!block.AddToBlockIndex(nFile, nBlockPos))
+
+        // Update block file file-pointer position
+        if (!txdb.WriteBlockFileFPtrPos(nBlockFileFPtrPos))
+            return error("LoadBlockIndex() : updating block file file-pointer position in database failed");
+
+        // Add block to block-index
+        if (!block.AddToBlockIndex(nCurrentBlockFile, nBlockPos))
             return error("LoadBlockIndex() : genesis block not accepted");
     }
 
+    txdb.Close();
     return true;
 }
 
@@ -2874,7 +2924,7 @@ bool SendMessages(CNode* pto, bool fSendTrickle)
         if (pto->nVersion == 0)
             return true;
 
-        // Keep-alive ping. We send a nonce of zero because we don't use it anywhere 
+        // Keep-alive ping. We send a nonce of zero because we don't use it anywhere
         // right now.
         if (pto->nLastSend && GetTime() - pto->nLastSend > 30 * 60 && pto->vSend.empty()) {
             if (pto->nVersion > BIP0031_VERSION)
@@ -3074,7 +3124,7 @@ void SHA256Transform(void* pstate, void* pinput, const void* pinit)
         ctx.h[i] = ((uint32_t*)pinit)[i];
 
     SHA256_Update(&ctx, data, sizeof(data));
-    for (int i = 0; i < 8; i++) 
+    for (int i = 0; i < 8; i++)
         ((uint32_t*)pstate)[i] = ctx.h[i];
 }
 

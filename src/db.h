@@ -290,6 +290,10 @@ public:
     bool WriteHashBestChain(uint256 hashBestChain);
     bool ReadBestInvalidWork(CBigNum& bnBestInvalidWork);
     bool WriteBestInvalidWork(CBigNum bnBestInvalidWork);
+    bool ReadBlockFileNum(unsigned int& nBlockFileNum);
+    bool WriteBlockFileNum(unsigned int nBlockFileNum);
+    bool ReadBlockFileFPtrPos(unsigned long& nBlockFileFPtrPos);
+    bool WriteBlockFileFPtrPos(unsigned long nBlockFileFPtrPos);
     bool LoadBlockIndex();
 };
 

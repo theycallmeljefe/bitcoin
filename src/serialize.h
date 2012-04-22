@@ -13,14 +13,18 @@
 #include <limits>
 #include <cstring>
 #include <cstdio>
+#include <iostream>
+#include <fstream>
 
-#include <boost/type_traits/is_fundamental.hpp>
 #include <boost/tuple/tuple.hpp>
 #include <boost/tuple/tuple_comparison.hpp>
 #include <boost/tuple/tuple_io.hpp>
+#include <boost/type_traits/is_fundamental.hpp>
+#include <boost/filesystem.hpp>
 
 #include "allocators.h"
 #include "version.h"
+#include "limits.h"
 
 typedef long long  int64;
 typedef unsigned long long  uint64;
@@ -28,7 +32,11 @@ typedef unsigned long long  uint64;
 class CScript;
 class CDataStream;
 class CAutoFile;
-static const unsigned int MAX_SIZE = 0x02000000;
+class CAutoFileStream;
+// currently 32MB
+static const unsigned int MAX_SIZE = 0x02000000UL;
+// currently 2032MB - FAT32 max. is 4GB - 1 Byte
+static const unsigned long MAX_FILESIZE = 0x7F000000UL;
 
 // Used to bypass the rule against non-const reference to temporary
 // where it makes sense with wrappers such as CFlatData or CTxDB
@@ -1182,4 +1190,209 @@ public:
     }
 };
 
+class CAutoFileStream
+{
+protected:
+    boost::filesystem::path pathFile_Full;
+    boost::filesystem::path pathFile_PathOnly;
+    std::fstream file;
+    unsigned long nFilePtrPos;
+
+    short state;
+    short exceptmask;
+
+public:
+    int nType;
+    int nVersion;
+
+    CAutoFileStream(boost::filesystem::path pathFileIn, unsigned long nFilePtrPosIn, int nTypeIn, int nVersionIn)
+    {
+        nType = nTypeIn;
+        nVersion = nVersionIn;
+
+        // save full path + filename
+        pathFile_Full = pathFileIn;
+        // save only path
+        pathFile_PathOnly = pathFile_Full.parent_path();
+
+        nFilePtrPos = nFilePtrPosIn;
+
+        state = 0;
+        exceptmask = std::ios::badbit | std::ios::failbit;
+    }
+
+    ~CAutoFileStream()
+    {
+        close();
+    }
+
+    void close(bool fTruncate = false)
+    {
+        if (file.is_open())
+        {
+            file.flush();
+            file.close();
+
+            if (fTruncate)
+                truncateFile();
+        }
+    }
+
+    void flush()
+    {
+        if (file.is_open())
+            file.flush();
+    }
+
+    unsigned long getFilePtrPos()
+    {
+        return nFilePtrPos;
+    }
+
+    void setFilePtrPos(unsigned long nFilePtrPosIn)
+    {
+        nFilePtrPos = nFilePtrPosIn;
+    }
+
+    void updateFilePtrPos()
+    {
+        nFilePtrPos = file.tellp();
+    }
+
+    std::string getFile()
+    {
+        return pathFile_Full.string();
+    }
+
+    bool open(std::ios_base::openmode mode = std::ios::binary | std::ios::in | std::ios::out)
+    {
+        if (!file.is_open())
+        {
+            file.open(pathFile_Full.string().c_str(), mode);
+        }
+        return file.is_open();
+    }
+
+    bool preallocateDiskSpace(const unsigned long nFileSizeInByte)
+    {
+        if (!boost::filesystem::exists(pathFile_Full))
+        {
+#ifdef WIN32
+            HANDLE hFile = CreateFileA(pathFile_Full.string().c_str(), GENERIC_READ | GENERIC_WRITE, 0, 0, CREATE_ALWAYS, FILE_FLAG_SEQUENTIAL_SCAN, NULL);
+            if (hFile != INVALID_HANDLE_VALUE)
+            {
+                LARGE_INTEGER nFileSize;
+                // LowPart allows up to 4095MB - HighPart starts with 4096MB
+                nFileSize.u.LowPart = (nFileSizeInByte > ULONG_MAX) ? ULONG_MAX : nFileSizeInByte;
+                nFileSize.u.HighPart = 0;
+                SetFilePointerEx(hFile, nFileSize, 0, FILE_BEGIN);
+                SetEndOfFile(hFile);
+                SetFilePointer(hFile, 0, 0, FILE_BEGIN);
+                CloseHandle(hFile);
 #endif
+                return true;
+            }
+            return false;
+        }
+        return false;
+    }
+
+    bool truncateFile()
+    {
+        if (boost::filesystem::exists(pathFile_Full))
+        {
+#ifdef WIN32
+            HANDLE hFile = CreateFileA(pathFile_Full.string().c_str(), GENERIC_READ | GENERIC_WRITE, 0, 0, OPEN_EXISTING, FILE_FLAG_SEQUENTIAL_SCAN, NULL);
+            if (hFile != INVALID_HANDLE_VALUE)
+            {
+                LARGE_INTEGER nFileSize;
+                // LowPart allows up to 4095MB - HighPart starts with 4096MB
+                nFileSize.u.LowPart = getFilePtrPos();
+                nFileSize.u.HighPart = 0;
+                SetFilePointerEx(hFile, nFileSize, 0, FILE_BEGIN);
+                SetEndOfFile(hFile);
+                SetFilePointer(hFile, 0, 0, FILE_BEGIN);
+                CloseHandle(hFile);
+#endif
+                return true;
+            }
+            return false;
+        }
+        return false;
+    }
+
+    //
+    // Stream subset
+    //
+    void setstate(short bits, const char* psz)
+    {
+        state |= bits;
+        if (state & exceptmask)
+            throw std::ios_base::failure(psz);
+    }
+
+    bool fail() const            { return state & (std::ios::badbit | std::ios::failbit); }
+    bool good() const            { return state == 0; }
+    void clear(short n = 0)      { state = n; }
+    short exceptions()           { return exceptmask; }
+    short exceptions(short mask) { short prev = exceptmask; exceptmask = mask; setstate(0, "CAutoFileStream"); return prev; }
+
+    void SetType(int n)          { nType = n; }
+    int GetType()                { return nType; }
+    void SetVersion(int n)       { nVersion = n; }
+    int GetVersion()             { return nVersion; }
+    void WriteVersion()          { *this << nVersion; }
+
+    CAutoFileStream& read(char* pch, size_t nSize)
+    {
+        if (!file.is_open())
+            throw std::ios_base::failure("CAutoFileStream::read : file is not open");
+
+        // Todo: use fstream for reading
+        //if (fread(pch, 1, nSize, file) != nSize)
+        //    setstate(std::ios::failbit, feof(file) ? "CAutoFile::read : end of file" : "CAutoFile::read : fread failed");
+
+        return (*this);
+    }
+
+    CAutoFileStream& write(const char* pch, size_t nSize)
+    {
+        if (!file.is_open())
+            throw std::ios_base::failure("CAutoFileStream::write : file is not open");
+
+        file.seekp(nFilePtrPos, std::ios::beg);
+        file.write(pch, nSize);
+        updateFilePtrPos();
+
+        return (*this);
+    }
+
+    template<typename T>
+    unsigned int GetSerializeSize(const T& obj)
+    {
+        // Tells the size of the object if serialized to this stream
+        return ::GetSerializeSize(obj, nType, nVersion);
+    }
+
+    template<typename T>
+    CAutoFileStream& operator<<(const T& obj)
+    {
+        // Serialize to this stream
+        if (!file.is_open())
+            throw std::ios_base::failure("CAutoFileStream::operator<< : file is not open");
+        ::Serialize(*this, obj, nType, nVersion);
+        return (*this);
+    }
+
+    template<typename T>
+    CAutoFile& operator>>(T& obj)
+    {
+        // Unserialize from this stream
+        if (!file.is_open())
+            throw std::ios_base::failure("CAutoFileStream::operator>> : file is not open");
+        ::Unserialize(*this, obj, nType, nVersion);
+        return (*this);
+    }
+};
+
+#endif // BITCOIN_SERIALIZE_H
