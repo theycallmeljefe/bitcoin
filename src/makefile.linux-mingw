@@ -50,6 +50,7 @@ OBJS= \
     obj/netbase.o \
     obj/addrman.o \
     obj/crypter.o \
+    obj/hmac.o \
     obj/key.o \
     obj/db.o \
     obj/init.o \
