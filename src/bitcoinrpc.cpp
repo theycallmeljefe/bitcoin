@@ -30,7 +30,6 @@ typedef boost::asio::ssl::stream<boost::asio::ip::tcp::socket> SSLStream;
 // file, we could use the compiled json_spirit option.
 
 using namespace std;
-using namespace boost;
 using namespace boost::asio;
 using namespace json_spirit;
 
@@ -2271,7 +2270,7 @@ void ErrorReply(std::ostream& stream, const Object& objError, const Value& id)
 
 bool ClientAllowed(const string& strAddress)
 {
-    if (strAddress == asio::ip::address_v4::loopback().to_string())
+    if (strAddress == ip::address_v4::loopback().to_string())
         return true;
     const vector<string>& vAllow = mapMultiArgs["-rpcallowip"];
     BOOST_FOREACH(string strAllow, vAllow)
@@ -2283,7 +2282,7 @@ bool ClientAllowed(const string& strAddress)
 //
 // IOStream device that speaks SSL but can also speak non-SSL
 //
-class SSLIOStreamDevice : public iostreams::device<iostreams::bidirectional> {
+class SSLIOStreamDevice : public boost::iostreams::device<boost::iostreams::bidirectional> {
 public:
     SSLIOStreamDevice(SSLStream &streamIn, bool fUseSSLIn) : stream(streamIn)
     {
@@ -2300,14 +2299,14 @@ public:
     std::streamsize read(char* s, std::streamsize n)
     {
         handshake(ssl::stream_base::server); // HTTPS servers read first
-        if (fUseSSL) return stream.read_some(asio::buffer(s, n));
-        return stream.next_layer().read_some(asio::buffer(s, n));
+        if (fUseSSL) return stream.read_some(boost::asio::buffer(s, n));
+        return stream.next_layer().read_some(boost::asio::buffer(s, n));
     }
     std::streamsize write(const char* s, std::streamsize n)
     {
         handshake(ssl::stream_base::client); // HTTPS clients write first
-        if (fUseSSL) return asio::write(stream, asio::buffer(s, n));
-        return asio::write(stream.next_layer(), asio::buffer(s, n));
+        if (fUseSSL) return boost::asio::write(stream, boost::asio::buffer(s, n));
+        return boost::asio::write(stream.next_layer(), boost::asio::buffer(s, n));
     }
     bool connect(const std::string& server, const std::string& port)
     {
@@ -2315,7 +2314,7 @@ public:
         ip::tcp::resolver::query query(server.c_str(), port.c_str());
         ip::tcp::resolver::iterator endpoint_iterator = resolver.resolve(query);
         ip::tcp::resolver::iterator end;
-        boost::system::error_code error = asio::error::host_not_found;
+        boost::system::error_code error = boost::asio::error::host_not_found;
         while (error && endpoint_iterator != end)
         {
             stream.lowest_layer().close();
@@ -2381,9 +2380,9 @@ void ThreadRPCServer2(void* parg)
     }
 
     bool fUseSSL = GetBoolArg("-rpcssl");
-    asio::ip::address bindAddress = mapArgs.count("-rpcallowip") ? asio::ip::address_v4::any() : asio::ip::address_v4::loopback();
+    boost::asio::ip::address bindAddress = mapArgs.count("-rpcallowip") ? boost::asio::ip::address_v4::any() : boost::asio::ip::address_v4::loopback();
 
-    asio::io_service io_service;
+    boost::asio::io_service io_service;
     ip::tcp::endpoint endpoint(bindAddress, GetArg("-rpcport", 8332));
     ip::tcp::acceptor acceptor(io_service);
     try
@@ -2406,14 +2405,14 @@ void ThreadRPCServer2(void* parg)
     {
         context.set_options(ssl::context::no_sslv2);
 
-        filesystem::path pathCertFile(GetArg("-rpcsslcertificatechainfile", "server.cert"));
-        if (!pathCertFile.is_complete()) pathCertFile = filesystem::path(GetDataDir()) / pathCertFile;
-        if (filesystem::exists(pathCertFile)) context.use_certificate_chain_file(pathCertFile.string());
+        boost::filesystem::path pathCertFile(GetArg("-rpcsslcertificatechainfile", "server.cert"));
+        if (!pathCertFile.is_complete()) pathCertFile = GetDataDir() / pathCertFile;
+        if (boost::filesystem::exists(pathCertFile)) context.use_certificate_chain_file(pathCertFile.string());
         else printf("ThreadRPCServer ERROR: missing server certificate file %s\n", pathCertFile.string().c_str());
 
-        filesystem::path pathPKFile(GetArg("-rpcsslprivatekeyfile", "server.pem"));
-        if (!pathPKFile.is_complete()) pathPKFile = filesystem::path(GetDataDir()) / pathPKFile;
-        if (filesystem::exists(pathPKFile)) context.use_private_key_file(pathPKFile.string(), ssl::context::pem);
+        boost::filesystem::path pathPKFile(GetArg("-rpcsslprivatekeyfile", "server.pem"));
+        if (!pathPKFile.is_complete()) pathPKFile = GetDataDir() / pathPKFile;
+        if (boost::filesystem::exists(pathPKFile)) context.use_private_key_file(pathPKFile.string(), ssl::context::pem);
         else printf("ThreadRPCServer ERROR: missing server private key file %s\n", pathPKFile.string().c_str());
 
         string strCiphers = GetArg("-rpcsslciphers", "TLSv1+HIGH:!SSLv2:!aNULL:!eNULL:!AH:!3DES:@STRENGTH");
@@ -2425,7 +2424,7 @@ void ThreadRPCServer2(void* parg)
         // Accept connection
         SSLStream sslStream(io_service, context);
         SSLIOStreamDevice d(sslStream, fUseSSL);
-        iostreams::stream<SSLIOStreamDevice> stream(d);
+        boost::iostreams::stream<SSLIOStreamDevice> stream(d);
 
         ip::tcp::endpoint peer;
         vnThreadsRunning[THREAD_RPCSERVER]--;
@@ -2558,12 +2557,12 @@ Object CallRPC(const string& strMethod, const Array& params)
 
     // Connect to localhost
     bool fUseSSL = GetBoolArg("-rpcssl");
-    asio::io_service io_service;
+    boost::asio::io_service io_service;
     ssl::context context(io_service, ssl::context::sslv23);
     context.set_options(ssl::context::no_sslv2);
     SSLStream sslStream(io_service, context);
     SSLIOStreamDevice d(sslStream, fUseSSL);
-    iostreams::stream<SSLIOStreamDevice> stream(d);
+    boost::iostreams::stream<SSLIOStreamDevice> stream(d);
     if (!d.connect(GetArg("-rpcconnect", "127.0.0.1"), GetArg("-rpcport", "8332")))
         throw runtime_error("couldn't connect to server");
 
