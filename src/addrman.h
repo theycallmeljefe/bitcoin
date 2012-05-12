@@ -379,6 +379,28 @@ public:
         }
     });)
 
+    void DumpText(FILE *file) const {
+        LOCK(cs);
+        int64 nNow = GetTime();
+        for (unsigned int i=0; i<vRandom.size(); i++) {
+            int nId = vRandom[i];
+            std::map<int, CAddrInfo>::const_iterator it = mapInfo.find(nId);
+            const CAddrInfo &info = (*it).second;
+            fprintf(file, "%s: from:%s fails:%i succ:%.2fd try:%.2fd buck:", info.ToString().c_str(), info.source.ToString().c_str(), info.nAttempts, 1.0*(nNow - info.nLastSuccess)/86400, 1.0*(nNow - info.nLastTry)/86400);
+            if (info.fInTried) {
+                fprintf(file, "T%i", info.GetTriedBucket(nKey));
+            } else {
+                bool fAlready = false;
+                for (unsigned int nUBucket = 0; nUBucket <= vvNew.size(); nUBucket++)
+                    if (vvNew[nUBucket].count(nId)) {
+                        fprintf(file,"%sN%i",fAlready ? "," : "", nUBucket);
+                        fAlready = true;
+                    }
+            }
+            fprintf(file, "\n");
+        }
+    }
+
     CAddrMan() : vRandom(0), vvTried(ADDRMAN_TRIED_BUCKET_COUNT, std::vector<int>(0)), vvNew(ADDRMAN_NEW_BUCKET_COUNT, std::set<int>())
     {
          nKey.resize(32);

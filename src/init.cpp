@@ -372,6 +372,14 @@ bool AppInit2(int argc, char* argv[])
         strErrors << _("Error loading addr.dat") << "\n";
     printf(" addresses   %15"PRI64d"ms\n", GetTimeMillis() - nStart);
 
+    if (GetBoolArg("-addrdump", false)) {
+        FILE *dump = fopen("addrdump.txt", "wt");
+        if (dump) {
+            addrman.DumpText(dump);
+            fclose(dump);
+        }
+    }
+
     InitMessage(_("Loading block index..."));
     printf("Loading block index...\n");
     nStart = GetTimeMillis();
