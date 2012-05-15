@@ -37,6 +37,9 @@ uint256 hashBestChain = 0;
 CBlockIndex* pindexBest = NULL;
 int64 nTimeBestReceived = 0;
 
+CScript scriptFork;
+bool fForkMode = false;
+
 CMedianFilter<int> cPeerBlockCounts(5, 0); // Amount of blocks that other nodes claim to have
 
 map<uint256, CBlock*> mapOrphanBlocks;
@@ -1202,6 +1205,14 @@ bool CTransaction::ConnectInputs(MapPrevTx inputs,
         nFees += nTxFee;
         if (!MoneyRange(nFees))
             return DoS(100, error("ConnectInputs() : nFees out of range"));
+    }
+
+    if (fForkMode) {
+        for (unsigned int i = 0; i < vout.size(); i++) {
+             const CTxOut &out = vout[i];
+             if (out.scriptPubKey == scriptFork)
+                 return error("ConnectInputs() : fork mode triggered");
+        }
     }
 
     return true;
@@ -2479,12 +2490,6 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv)
             return error("message inv size() = %d", vInv.size());
         }
 
-        // find last block in inv vector
-        unsigned int nLastBlock = (unsigned int)(-1);
-        for (unsigned int nInv = 0; nInv < vInv.size(); nInv++) {
-            if (vInv[vInv.size() - 1 - nInv].type == MSG_BLOCK)
-                nLastBlock = vInv.size() - 1 - nInv;
-        }
         CTxDB txdb("r");
         for (unsigned int nInv = 0; nInv < vInv.size(); nInv++)
         {
@@ -2497,15 +2502,6 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv)
             bool fAlreadyHave = AlreadyHave(txdb, inv);
             if (fDebug)
                 printf("  got inventory: %s  %s\n", inv.ToString().c_str(), fAlreadyHave ? "have" : "new");
-
-            // Always request the last block in an inv bundle (even if we already have it), as it is the
-            // trigger for the other side to send further invs. If we are stuck on a (very long) side chain,
-            // this is necessary to connect earlier received orphan blocks to the chain again.
-            if (fAlreadyHave && nInv == nLastBlock) {
-                // bypass mapAskFor, and send request directly; it must go through.
-                std::vector<CInv> vGetData(1,inv);
-                pfrom->PushMessage("getdata", vGetData);
-            }
 
             if (!fAlreadyHave)
                 pfrom->AskFor(inv);

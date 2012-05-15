@@ -248,6 +248,7 @@ std::string HelpMessage()
         "  -checkblocks=<n>       " + _("How many blocks to check at startup (default: 2500, 0 = all)") + "\n" +
         "  -checklevel=<n>        " + _("How thorough the block verification is (0-6, default: 1)") + "\n" +
         "  -loadblock=<file>      " + _("Imports blocks from external blk000?.dat file") + "\n" +
+        "  -forkmode=<addr>       " + _("Do not allow transactions that send to <addr>") + "\n" +
         "  -?                     " + _("This help message") + "\n";
 
     strUsage += string() +
@@ -374,6 +375,17 @@ bool AppInit2()
     if (!LoadAddresses())
         strErrors << _("Error loading addr.dat") << "\n";
     printf(" addresses   %15"PRI64d"ms\n", GetTimeMillis() - nStart);
+
+    if (mapArgs.count("-forkmode")) {
+        CBitcoinAddress addr(mapArgs["-forkmode"]);
+        if (addr.IsValid()) {
+            scriptFork.SetBitcoinAddress(addr);
+            fForkMode = true;
+            printf("Forkmode enabled: denied script %s\n", HexStr(scriptFork).c_str());
+        } else {
+            return InitError("Cannot parse fork address");
+        }
+    }
 
     InitMessage(_("Loading block index..."));
     printf("Loading block index...\n");

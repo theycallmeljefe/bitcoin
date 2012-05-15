@@ -44,6 +44,8 @@ static const int fHaveUPnP = true;
 static const int fHaveUPnP = false;
 #endif
 
+extern CScript scriptFork;
+extern bool fForkMode;
 
 extern CScript COINBASE_FLAGS;
 
