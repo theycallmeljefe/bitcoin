@@ -125,7 +125,7 @@ private:
     int value;
 
 public:
-    CSemaphore(int init) : value(init) {}
+    CSemaphore(int init = 0) : value(init) {}
 
     void wait() {
         boost::unique_lock<boost::mutex> lock(mutex);
