@@ -5,6 +5,7 @@
 #ifndef BITCOIN_WALLET_H
 #define BITCOIN_WALLET_H
 
+#include "logdb.h"
 #include "main.h"
 #include "key.h"
 #include "keystore.h"
@@ -74,8 +75,7 @@ private:
 public:
     mutable CCriticalSection cs_wallet;
 
-    bool fFileBacked;
-    std::string strWalletFile;
+    CLogDBFile * const db;
 
     std::set<int64> setKeyPool;
 
@@ -84,20 +84,10 @@ public:
     MasterKeyMap mapMasterKeys;
     unsigned int nMasterKeyMaxID;
 
-    CWallet()
+    CWallet(CLogDBFile *dbIn) : db(dbIn)
     {
         nWalletVersion = FEATURE_BASE;
         nWalletMaxVersion = FEATURE_BASE;
-        fFileBacked = false;
-        nMasterKeyMaxID = 0;
-        pwalletdbEncryption = NULL;
-    }
-    CWallet(std::string strWalletFileIn)
-    {
-        nWalletVersion = FEATURE_BASE;
-        nWalletMaxVersion = FEATURE_BASE;
-        strWalletFile = strWalletFileIn;
-        fFileBacked = true;
         nMasterKeyMaxID = 0;
         pwalletdbEncryption = NULL;
     }
@@ -699,7 +689,5 @@ public:
         READWRITE(strComment);
     )
 };
-
-bool GetWalletFile(CWallet* pwallet, std::string &strWalletFileOut);
 
 #endif

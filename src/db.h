@@ -13,18 +13,11 @@
 
 #include <db_cxx.h>
 
-class CAddress;
 class CAddrMan;
-class CBlockLocator;
 class CDiskBlockIndex;
 class CDiskTxPos;
-class CMasterKey;
 class COutPoint;
 class CTxIndex;
-class CWallet;
-class CWalletTx;
-
-extern unsigned int nWalletDBUpdated;
 
 void ThreadFlushWalletDB(void* parg);
 bool BackupWallet(const CWallet& wallet, const std::string& strDest);

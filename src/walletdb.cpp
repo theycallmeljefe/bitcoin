@@ -19,7 +19,6 @@ static uint64 nAccountingEntryNumber = 0;
 
 bool CWalletDB::WriteName(const string& strAddress, const string& strName)
 {
-    nWalletDBUpdated++;
     return Write(make_pair(string("name"), strAddress), strName);
 }
 
@@ -27,7 +26,6 @@ bool CWalletDB::EraseName(const string& strAddress)
 {
     // This should only be used for sending addresses, never for receiving addresses,
     // receiving addresses must always have an address book entry if they're not change return.
-    nWalletDBUpdated++;
     return Erase(make_pair(string("name"), strAddress));
 }
 
@@ -61,12 +59,11 @@ int64 CWalletDB::GetAccountCreditDebit(const string& strAccount)
 
 void CWalletDB::ListAccountCreditDebit(const string& strAccount, list<CAccountingEntry>& entries)
 {
+/*
     bool fAllAccounts = (strAccount == "*");
 
-    Dbc* pcursor = GetCursor();
     if (!pcursor)
         throw runtime_error("CWalletDB::ListAccountCreditDebit() : cannot create DB cursor");
-    unsigned int fFlags = DB_SET_RANGE;
     loop
     {
         // Read next record
@@ -99,6 +96,7 @@ void CWalletDB::ListAccountCreditDebit(const string& strAccount, list<CAccountin
     }
 
     pcursor->close();
+*/
 }
 
 
@@ -107,7 +105,8 @@ int CWalletDB::LoadWallet(CWallet* pwallet)
     pwallet->vchDefaultKey = CPubKey();
     int nFileVersion = 0;
     vector<uint256> vWalletUpgrade;
-    bool fIsEncrypted = false;
+
+    bool fAutoTransaction = TxnBegin();
 
     //// todo: shouldn't we catch exceptions and try to recover and continue?
     {
@@ -120,27 +119,10 @@ int CWalletDB::LoadWallet(CWallet* pwallet)
             pwallet->LoadMinVersion(nMinVersion);
         }
 
-        // Get cursor
-        Dbc* pcursor = GetCursor();
-        if (!pcursor)
-        {
-            printf("Error getting wallet database cursor\n");
-            return DB_CORRUPT;
-        }
-
-        loop
-        {
+        for (CWalletDB::const_iterator it = begin(); it != end(); it++) {
             // Read next record
-            CDataStream ssKey(SER_DISK, CLIENT_VERSION);
-            CDataStream ssValue(SER_DISK, CLIENT_VERSION);
-            int ret = ReadAtCursor(pcursor, ssKey, ssValue);
-            if (ret == DB_NOTFOUND)
-                break;
-            else if (ret != 0)
-            {
-                printf("Error reading next record from wallet database\n");
-                return DB_CORRUPT;
-            }
+            CDataStream ssKey((*it).first, SER_DISK, CLIENT_VERSION);
+            CDataStream ssValue((*it).second, SER_DISK, CLIENT_VERSION);
 
             // Unserialize
             // Taking advantage of the fact that pair serialization
@@ -271,7 +253,6 @@ int CWalletDB::LoadWallet(CWallet* pwallet)
                     printf("Error reading wallet database: LoadCryptedKey failed\n");
                     return DB_CORRUPT;
                 }
-                fIsEncrypted = true;
             }
             else if (strType == "defaultkey")
             {
@@ -302,7 +283,6 @@ int CWalletDB::LoadWallet(CWallet* pwallet)
                 }
             }
         }
-        pcursor->close();
     }
 
     BOOST_FOREACH(uint256 hash, vWalletUpgrade)
@@ -310,19 +290,15 @@ int CWalletDB::LoadWallet(CWallet* pwallet)
 
     printf("nFileVersion = %d\n", nFileVersion);
 
-
-    // Rewrite encrypted wallets of versions 0.4.0 and 0.5.0rc:
-    if (fIsEncrypted && (nFileVersion == 40000 || nFileVersion == 50000))
-        return DB_NEED_REWRITE;
-
-    if (nFileVersion < CLIENT_VERSION) // Update
-        WriteVersion(CLIENT_VERSION);
+    if (fAutoTransaction)
+        TxnCommit();
 
     return DB_LOAD_OK;
 }
 
 void ThreadFlushWalletDB(void* parg)
 {
+/*
     const string& strFile = ((const string*)parg)[0];
     static bool fOneThread;
     if (fOneThread)
@@ -378,10 +354,12 @@ void ThreadFlushWalletDB(void* parg)
             }
         }
     }
+*/
 }
 
 bool BackupWallet(const CWallet& wallet, const string& strDest)
 {
+/*
     if (!wallet.fFileBacked)
         return false;
     while (!fShutdown)
@@ -417,5 +395,7 @@ bool BackupWallet(const CWallet& wallet, const string& strDest)
         }
         Sleep(100);
     }
+    return false;
+*/
     return false;
 }

@@ -604,7 +604,7 @@ Value getnewaddress(const Array& params, bool fHelp)
 
 CBitcoinAddress GetAccountAddress(string strAccount, bool bForceNew=false)
 {
-    CWalletDB walletdb(pwalletMain->strWalletFile);
+    CWalletDB walletdb(pwalletMain->db);
 
     CAccount account;
     walletdb.ReadAccount(strAccount, account);
@@ -964,7 +964,7 @@ int64 GetAccountBalance(CWalletDB& walletdb, const string& strAccount, int nMinD
 
 int64 GetAccountBalance(const string& strAccount, int nMinDepth)
 {
-    CWalletDB walletdb(pwalletMain->strWalletFile);
+    CWalletDB walletdb(pwalletMain->db);
     return GetAccountBalance(walletdb, strAccount, nMinDepth);
 }
 
@@ -1039,7 +1039,7 @@ Value movecmd(const Array& params, bool fHelp)
     if (params.size() > 4)
         strComment = params[4].get_str();
 
-    CWalletDB walletdb(pwalletMain->strWalletFile);
+    CWalletDB walletdb(pwalletMain->db);
     if (!walletdb.TxnBegin())
         throw JSONRPCError(-20, "database error");
 
@@ -1487,7 +1487,7 @@ Value listtransactions(const Array& params, bool fHelp)
         throw JSONRPCError(-8, "Negative from");
 
     Array ret;
-    CWalletDB walletdb(pwalletMain->strWalletFile);
+    CWalletDB walletdb(pwalletMain->db);
 
     // First: get all CWalletTx and CAccountingEntry into a sorted-by-time multimap.
     typedef pair<CWalletTx*, CAccountingEntry*> TxPair;
@@ -1579,7 +1579,7 @@ Value listaccounts(const Array& params, bool fHelp)
     }
 
     list<CAccountingEntry> acentries;
-    CWalletDB(pwalletMain->strWalletFile).ListAccountCreditDebit("*", acentries);
+    CWalletDB(pwalletMain->db).ListAccountCreditDebit("*", acentries);
     BOOST_FOREACH(const CAccountingEntry& entry, acentries)
         mapAccountBalances[entry.strAccount] += entry.nCreditDebit;
 

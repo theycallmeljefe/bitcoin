@@ -6,6 +6,7 @@
 #include <unistd.h>
 
 #include "logdb.h"
+#include "util.h"
 
 using namespace std;
 
@@ -29,7 +30,7 @@ size_t static WriteInt(FILE* file, uint64 n)
     return nRet;
 }
 
-int static ReadInt(FILE *file)
+uint64 static ReadInt(FILE *file)
 {
     uint64_t nRet = 0;
     uint64_t nBase = 1;
@@ -55,6 +56,7 @@ int static ReadInt(FILE *file)
 //   if mode==1: integer: data length (max 1 MiB)
 //   if mode==1: data
 // 0 byte
+// integer: timestamp (unix time)
 // 8 bytes checksum: first 8 bytes of running SHA256
 
 class CModEntry
@@ -72,14 +74,12 @@ void CLogDBFile::Init_()
     mapData.clear();
     nUsed = 0;
     nWritten = 0;
+    nRefCount = 0;
     setDirty.clear();
 }
 
 bool CLogDBFile::Write_(const data_t &key, const data_t &value, bool fOverwrite, bool fLoad)
 {
-    if (!fLoad)
-        return false;
-
     // update nUsed
     std::map<data_t, data_t>::iterator it = mapData.find(key);
     if (it != mapData.end())
@@ -119,9 +119,6 @@ bool CLogDBFile::Exists_(const data_t &key) const
 
 bool CLogDBFile::Erase_(const data_t &key, bool fLoad)
 {
-    if (!fLoad)
-        return false;
-
     std::map<data_t, data_t>::iterator it = mapData.find(key);
     if (it != mapData.end())
     {
@@ -156,7 +153,7 @@ bool CLogDBFile::Load_()
         if (getc(file) != 0xE6) return false;
         if (getc(file) != 0xB0) return false;
 
-        printf("CLogDB::Load(): frame header found\n");
+//        printf("CLogDBFile::Load(): frame header found\n");
 
         vector<CModEntry> vMod;
 
@@ -167,7 +164,7 @@ bool CLogDBFile::Load_()
         {
             if (feof(file))
             {
-                printf("CLogDB::Load(): unexpected eof at record start\n");
+                printf("CLogDBFile::Load(): unexpected eof at record start\n");
                 return false;
             }
 
@@ -175,7 +172,7 @@ bool CLogDBFile::Load_()
             entry.nMode = getc(file);
             if (entry.nMode > 2)
             {
-                printf("CLogDB::Load(): unknown record mode\n");
+                printf("CLogDBFile::Load(): unknown record mode\n");
                 return false;
             }
 
@@ -184,22 +181,22 @@ bool CLogDBFile::Load_()
             if (entry.nMode == 0)
                 break;
 
-            printf("CLogDB::Load(): loading record mode %i\n", entry.nMode);
+            printf("CLogDBFile::Load(): loading record mode %i\n", entry.nMode);
 
             uint32_t nKeySize = ReadInt(file);
             if (nKeySize >= 0x1000)
             {
-                printf("CLogDB::Load(): oversizes key (%lu bytes)\n", (unsigned long)nKeySize);
+                printf("CLogDBFile::Load(): oversized key (%lu bytes)\n", (unsigned long)nKeySize);
                 return false;
             }
             entry.key.resize(nKeySize);
             if (fread(&entry.key[0], nKeySize, 1, file) != 1)
             {
-                printf("CLogDB::Load(): unable to read key (%lu bytes)\n", (unsigned long)nKeySize);
+                printf("CLogDBFile::Load(): unable to read key (%lu bytes)\n", (unsigned long)nKeySize);
                 return false;
             }
 
-            printf("CLogDB::load(): loading key (%.*s)\n", nKeySize, &entry.key[0]);
+//            printf("CLogDBFile::Load(): loading key (%.*s)\n", nKeySize, &entry.key[0]);
 
             SHA256_Update(&ctx, &nKeySize, 4);
             SHA256_Update(&ctx, &entry.key[0], nKeySize);
@@ -209,13 +206,13 @@ bool CLogDBFile::Load_()
                 int nValueSize = ReadInt(file);
                 if (nValueSize >= 0x100000)
                 {
-                    printf("CLogDB::Load(): oversized value (%lu bytes)\n", (unsigned long)nValueSize);
+                    printf("CLogDBFile::Load(): oversized value (%lu bytes)\n", (unsigned long)nValueSize);
                     return false;
                 }
                 entry.value.resize(nValueSize);
                 if (fread(&entry.value[0], nValueSize, 1, file) != 1)
                 {
-                    printf("CLogDB::Load(): unable to read value (%lu bytes)\n", (unsigned long)nValueSize);
+                    printf("CLogDBFile::Load(): unable to read value (%lu bytes)\n", (unsigned long)nValueSize);
                     return false;
                 }
 
@@ -229,7 +226,7 @@ bool CLogDBFile::Load_()
         unsigned char check[8];
         if (fread(check, 8, 1, file)!=1)
         {
-            printf("CLogDB::Load(): unable to read checksum\n");
+            printf("CLogDBFile::Load(): unable to read checksum\n");
             return false;
         }
 
@@ -239,7 +236,7 @@ bool CLogDBFile::Load_()
         SHA256_Final(checkx, &ctxFinal);
         if (memcmp(check,checkx,8))
         {
-            printf("CLogDB::Load(): checksum failed\n");
+            printf("CLogDBFile::Load(): checksum failed\n");
             return false;
         }
 
@@ -264,23 +261,23 @@ bool CLogDBFile::Load_()
 
     } while(true);
 
-    printf("CLogDB::Load(): done\n");
+//    printf("CLogDB::Load(): done\n");
 }
 
 bool CLogDBFile::Flush_()
 {
-    printf("CLogDB::Flush_()\n");
+//    printf("CLogDBFile::Flush()\n");
 
     if (setDirty.empty())
         return true;
 
-    printf("CLogDB::Flush_(): not dirty\n");
+//    printf("CLogDBFile::Flush(): dirty\n");
 
     unsigned char magic[4]={0xCC,0xC4,0xE6,0xB0};
 
     if (fwrite(magic, 4, 1, file) != 1)
     {
-        printf("CLogDB::Flush_(): error writing magic: %s\n", strerror(errno));
+        printf("CLogDBFile::Flush(): error writing magic: %s\n", strerror(errno));
     }
 
     SHA256_CTX ctx = ctxState;
@@ -297,7 +294,7 @@ bool CLogDBFile::Flush_()
             uint32_t nDataSize = (*it2).second.size();
             nWritten += nKeySize + nDataSize;
 
-            printf("CLogDB::Flush(): writing update(%.*s)\n", nKeySize, &(*it)[0]);
+//            printf("CLogDBFile::Flush(): writing update(%.*s)\n", nKeySize, &(*it)[0]);
 
             putc(nMode, file);
             WriteInt(file, nKeySize);
@@ -318,7 +315,7 @@ bool CLogDBFile::Flush_()
             uint32_t nKeySize = (*it).size();
             nWritten += nKeySize;
 
-            printf("CLogDB::Flush(): writing erase(%.*s)\n", nKeySize, &(*it)[0]);
+//            printf("CLogDBFile::Flush(): writing erase(%.*s)\n", nKeySize, &(*it)[0]);
 
             putc(nMode, file);
             WriteInt(file, nKeySize);
@@ -342,7 +339,7 @@ bool CLogDBFile::Flush_()
     fdatasync(fileno(file));
     ctxState = ctx;
 
-    printf("CLogDB::Flush(): wrote frame\n");
+//    printf("CLogDBFile::Flush(): wrote frame\n");
 
     setDirty.clear();
 
@@ -391,7 +388,7 @@ bool CLogDB::TxnCommit() {
     // commit modifications to backing CLogDBFile
     for (std::set<data_t>::const_iterator it = setDirty.begin(); it != setDirty.end(); it++) {
          std::map<data_t, data_t>::const_iterator it2 = mapData.find(*it);
-         if (it2 != mapData.end()) {
+         if (it2 == mapData.end()) {
              db->Erase_(*it);
          } else {
              db->Write_(*it, (*it2).second);
@@ -399,8 +396,6 @@ bool CLogDB::TxnCommit() {
     }
     mapData.clear();
     setDirty.clear();
-    if (!fReadOnly)
-        db->Flush_();
 
     fTransaction = false;
     if (fReadOnly)
@@ -411,13 +406,16 @@ bool CLogDB::TxnCommit() {
     return true;
 }
 
-bool CLogDB::Write(const data_t &key, const data_t &value) {
+bool CLogDB::Write_(const data_t &key, const data_t &value, bool fOverwrite) {
     if (fReadOnly)
         return false;
 
     LOCK(cs);
 
     bool fAutoTransaction = TxnBegin();
+
+    if (!fOverwrite && Exists_(key))
+        return false;
 
     mapData[key] = value;
     setDirty.insert(key);
@@ -428,7 +426,7 @@ bool CLogDB::Write(const data_t &key, const data_t &value) {
     return true;
 }
 
-bool CLogDB::Erase(const data_t &key) {
+bool CLogDB::Erase_(const data_t &key) {
     if (fReadOnly)
         return false;
 
@@ -444,7 +442,7 @@ bool CLogDB::Erase(const data_t &key) {
     return true;
 }
 
-bool CLogDB::Read(const data_t &key, data_t &value) {
+bool CLogDB::Read_(const data_t &key, data_t &value) {
     LOCK(cs);
 
     bool fAutoTransaction = TxnBegin();
@@ -468,7 +466,7 @@ bool CLogDB::Read(const data_t &key, data_t &value) {
     return fOk;
 }
 
-bool CLogDB::Exists(const data_t &key) {
+bool CLogDB::Exists_(const data_t &key) {
     LOCK(cs);
 
     bool fAutoTransaction = TxnBegin();
