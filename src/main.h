@@ -336,7 +336,7 @@ public:
         scriptPubKey.clear();
     }
 
-    bool IsNull()
+    bool IsNull() const
     {
         return (nValue == -1);
     }
@@ -692,7 +692,154 @@ protected:
     const CTxOut& GetOutputFor(const CTxIn& input, const MapPrevTx& inputs) const;
 };
 
+// ultra-pruned transaction: only retains height and unspent txouts
+class CCoins
+{
+public:
+    bool fCoinBase;
+    std::vector<CTxOut> vout;
+    int nHeight;
 
+    CCoins(const CTransaction &tx, int nHeightIn) : fCoinBase(tx.IsCoinBase()), vout(tx.vout), nHeight(nHeightIn) { }
+
+    CCoins() : fCoinBase(false), vout(0), nHeight(0) { }
+
+    void Cleanup() {
+        while (vout.size() > 0 && vout.back().IsNull())
+            vout.pop_back();
+    }
+
+    // calculate number of bytes for the bitmask, and its number of non-zero bytes
+    // each bit in the bitmask represents the availability of one output, but the
+    // availabilities of the first two outputs are encoded separately
+    void CalcMaskSize(unsigned int &nBytes, unsigned int &nNonzeroBytes) const {
+        unsigned int nLastUsedByte = 0;
+        for (unsigned int b = 0; 2+b*8 < vout.size(); b++) {
+            bool fZero = true;
+            for (unsigned int i = 0; i < 8 && 2+b*8+i < vout.size(); i++) {
+                if (!vout[2+b*8+i].IsNull()) {
+                    fZero = false;
+                    continue;
+                }
+            }
+            if (!fZero) {
+                nLastUsedByte = b + 1;
+                nNonzeroBytes++;
+            }
+        }
+        nBytes += nLastUsedByte;
+    }
+
+    bool IsCoinBase() const {
+        return fCoinBase;
+    }
+
+    unsigned int GetSerializeSize(int nType, int nVersion) const {
+        unsigned int nSize = 0;
+        unsigned int nMaskSize = 0, nMaskCode = 0;
+        CalcMaskSize(nMaskSize, nMaskCode);
+        bool fFirst = vout.size() > 0 && !vout[0].IsNull();
+        bool fSecond = vout.size() > 1 && !vout[1].IsNull();
+        assert(fFirst || fSecond || nMaskCode);
+        unsigned int nCode = 8*(nMaskCode - (fFirst || fSecond ? 0 : 1)) + (fCoinBase ? 1 : 0) + (fFirst ? 2 : 0) + (fSecond ? 4 : 0);
+        // size of header code
+        nSize += ::GetSerializeSize(VARINT(nCode), nType, nVersion);
+        // spentness bitmask
+        nSize += nMaskSize;
+        // txouts themself
+        for (unsigned int i = 0; i < vout.size(); i++)
+            if (!vout[i].IsNull())
+                nSize += ::GetSerializeSize(REF(vout[i]), nType, nVersion);
+        // height
+        nSize += ::GetSerializeSize(VARINT(nHeight), nType, nVersion);
+        return nSize;
+    }
+
+    template<typename Stream>
+    void Serialize(Stream &s, int nType, int nVersion) const {
+        unsigned int nMaskSize = 0, nMaskCode = 0;
+        CalcMaskSize(nMaskSize, nMaskCode);
+        bool fFirst = vout.size() > 0 && !vout[0].IsNull();
+        bool fSecond = vout.size() > 1 && !vout[1].IsNull();
+        assert(fFirst || fSecond || nMaskCode);
+        unsigned int nCode = 8*(nMaskCode - (fFirst || fSecond ? 0 : 1)) + (fCoinBase ? 1 : 0) + (fFirst ? 2 : 0) + (fSecond ? 4 : 0);
+        // header code
+        ::Serialize(s, VARINT(nCode), nType, nVersion);
+        // spentness bitmask
+        for (unsigned int b = 0; b<nMaskSize; b++) {
+            unsigned char chAvail = 0;
+            for (unsigned int i = 0; i < 8 && 2+b*8+i < vout.size(); i++)
+                if (!vout[2+b*8+i].IsNull())
+                    chAvail |= (1 << i);
+            ::Serialize(s, chAvail, nType, nVersion);
+        }
+        // txouts themself
+        for (unsigned int i = 0; i < vout.size(); i++) {
+            if (!vout[i].IsNull())
+                ::Serialize(s, REF(vout[i]), nType, nVersion);
+        }
+        // coinbase height
+        ::Serialize(s, VARINT(nHeight), nType, nVersion);
+    }
+
+    template<typename Stream>
+    void Unserialize(Stream &s, int nType, int nVersion) {
+        unsigned int nCode = 0;
+        // header code
+        ::Unserialize(s, VARINT(nCode), nType, nVersion);
+        fCoinBase = nCode & 1;
+        std::vector<bool> vAvail(2, false);
+        vAvail[0] = nCode & 2;
+        vAvail[1] = nCode & 4;
+        unsigned int nMaskCode = (nCode / 8) + ((nCode & 6) != 0 ? 0 : 1);
+        // spentness bitmask
+        while (nMaskCode > 0) {
+            unsigned char chAvail = 0;
+            ::Unserialize(s, chAvail, nType, nVersion);
+            for (unsigned int p = 0; p < 8; p++) {
+                bool f = (chAvail & (1 << p)) != 0;
+                vAvail.push_back(f);
+            }
+            if (chAvail != 0)
+                nMaskCode--;
+        }
+        // txouts themself
+        vout.assign(vAvail.size(), CTxOut());
+        for (unsigned int i = 0; i < vAvail.size(); i++) {
+            if (vAvail[i])
+                ::Unserialize(s, REF(vout[i]), nType, nVersion);
+        }
+        // coinbase height
+        ::Unserialize(s, VARINT(nHeight), nType, nVersion);
+        Cleanup();
+    }
+
+    bool Spend(const COutPoint &out) {
+        if (out.n >= vout.size())
+            return false;
+        if (vout[out.n].IsNull())
+            return false;
+        vout[out.n].SetNull();
+        Cleanup();
+        return true;
+    }
+
+    bool Prune(int nPos) {
+        COutPoint out(0, nPos);
+        return Spend(out);
+    }
+
+    bool IsAvailable(unsigned int nPos) const {
+        return (nPos < vout.size() && !vout[nPos].IsNull());
+    }
+
+    bool IsPruned() const {
+        BOOST_FOREACH(const CTxOut &out, vout)
+            if (!out.IsNull())
+                return false;
+        return true;
+    }
+};
 
 
 
