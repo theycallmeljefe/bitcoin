@@ -692,6 +692,21 @@ protected:
     const CTxOut& GetOutputFor(const CTxIn& input, const MapPrevTx& inputs) const;
 };
 
+// wrapper for CTxOut that provides a more compact serialization
+class CTxOutCompressor
+{
+private:
+    CTxOut &txout;
+public:
+    CTxOutCompressor(CTxOut &txoutIn) : txout(txoutIn) { }
+
+    IMPLEMENT_SERIALIZE(
+        READWRITE(VARINT(txout.nValue));
+        CScriptCompressor cscript(REF(txout.scriptPubKey));
+        READWRITE(cscript);
+    )
+};
+
 // ultra-pruned transaction: only retains height and unspent txouts
 class CCoins
 {
@@ -749,7 +764,7 @@ public:
         // txouts themself
         for (unsigned int i = 0; i < vout.size(); i++)
             if (!vout[i].IsNull())
-                nSize += ::GetSerializeSize(REF(vout[i]), nType, nVersion);
+                nSize += ::GetSerializeSize(CTxOutCompressor(REF(vout[i])), nType, nVersion);
         // height
         nSize += ::GetSerializeSize(VARINT(nHeight), nType, nVersion);
         return nSize;
@@ -776,7 +791,7 @@ public:
         // txouts themself
         for (unsigned int i = 0; i < vout.size(); i++) {
             if (!vout[i].IsNull())
-                ::Serialize(s, REF(vout[i]), nType, nVersion);
+                ::Serialize(s, CTxOutCompressor(REF(vout[i])), nType, nVersion);
         }
         // coinbase height
         ::Serialize(s, VARINT(nHeight), nType, nVersion);
@@ -807,7 +822,7 @@ public:
         vout.assign(vAvail.size(), CTxOut());
         for (unsigned int i = 0; i < vAvail.size(); i++) {
             if (vAvail[i])
-                ::Unserialize(s, REF(vout[i]), nType, nVersion);
+                ::Unserialize(s, REF(CTxOutCompressor(vout[i])), nType, nVersion);
         }
         // coinbase height
         ::Unserialize(s, VARINT(nHeight), nType, nVersion);
