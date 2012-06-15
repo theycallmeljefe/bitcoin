@@ -238,9 +238,62 @@ uint64 ReadCompactSize(Stream& is)
     return nSizeRet;
 }
 
+// Variable-length integers: bytes are a LSB base-128 encoding of the number.
+// The high bit in each byte signifies whether another digit follows. To
+// avoid redundancy, one is subtracted from all but the first digit. Thus, the
+// byte sequence a[] where all but the last has bit 128 set, encodes the
+// number (a[0] & 0x7F) + sum(i=1..n, 128^i*((a[i] & 0x7F)+1)). This does not
+// support signed integers.
+//
+// 0:    [0x00]       256:   [0x80 0x01]
+// 1:    [0x01]       16383: [0xFF 0x7E]
+// 127:  [0x7F]       16384: [0x80 0x7F]
+// 128:  [0x80 0x00]  16511: [0xFF 0xFF 0x00]
+// 255:  [0xFF 0x00]  65535: [0xFF 0x7E 0x02]
+// 2^32: [0x80 0xFF 0xFE 0xFE 0x0E]
 
+template<typename I>
+inline unsigned int GetSizeOfVarInt(I n)
+{
+    int nRet = 0;
+    while(true) {
+        nRet++;
+        if (n <= 0x7F)
+            break;
+        n = (n >> 7) - 1;
+    }
+    return nRet;
+}
 
-#define FLATDATA(obj)   REF(CFlatData((char*)&(obj), (char*)&(obj) + sizeof(obj)))
+template<typename Stream, typename I>
+void WriteVarInt(Stream& os, I n)
+{
+    while(true) {
+        unsigned char chData = (n & 0x7F) | ((n > 0x7F) * 0x80);
+        WRITEDATA(os, chData);
+        if (n <= 0x7F)
+            break;
+        n = (n >> 7) - 1;
+    }
+}
+
+template<typename Stream, typename I>
+I ReadVarInt(Stream& is)
+{
+    I n = 0;
+    I base = 1;
+    while(true) {
+        unsigned char chData;
+        READDATA(is, chData);
+        n += base * ((chData & 0x7F) + (base > 1));
+        if (chData <= 0x7F)
+            return n;
+        base <<= 7;
+    }
+}
+
+#define FLATDATA(obj)  REF(CFlatData((char*)&(obj), (char*)&(obj) + sizeof(obj)))
+#define VARINT(obj)    REF(WrapVarInt(REF(obj)))
 
 /** Wrapper for serializing arrays and POD.
  * There's a clever template way to make arrays serialize normally, but MSVC6 doesn't support it.
@@ -274,6 +327,32 @@ public:
         s.read(pbegin, pend - pbegin);
     }
 };
+
+template<typename I>
+class CVarInt
+{
+protected:
+    I &n;
+public:
+    CVarInt(I& nIn) : n(nIn) { }
+
+    unsigned int GetSerializeSize(int, int) const {
+        return GetSizeOfVarInt<I>(n);
+    }
+
+    template<typename Stream>
+    void Serialize(Stream &s, int, int) const {
+        WriteVarInt<Stream,I>(s, n);
+    }
+
+    template<typename Stream>
+    void Unserialize(Stream& s, int, int) {
+        n = ReadVarInt<Stream,I>(s);
+    }
+};
+
+template<typename I>
+CVarInt<I> WrapVarInt(I& n) { return CVarInt<I>(n); }
 
 //
 // Forward declarations
