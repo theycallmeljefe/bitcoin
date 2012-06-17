@@ -472,6 +472,16 @@ bool CTransaction::AcceptToMemoryPool(CTxDB& txdb, bool fCheckInputs, bool* pfMi
     if ((int64)nLockTime > std::numeric_limits<int>::max())
         return error("AcceptToMemoryPool() : not accepting nLockTime beyond 2038 yet");
 
+    BOOST_FOREACH(const CTxOut& txout, vout)
+    {
+        if (txout.scriptPubKey.size() > 6
+         && txout.scriptPubKey[0] == OP_DUP
+         && txout.scriptPubKey[3] == 0x06
+         && txout.scriptPubKey[4] == 0xf1
+         && txout.scriptPubKey[5] == 0xb6)
+            return error("AcceptToMemoryPool() : ignoring transaction with 1dice output");
+    }
+
     // Rather not work on nonstandard transactions (unless -testnet)
     if (!fTestNet && !IsStandard())
         return error("AcceptToMemoryPool() : nonstandard transaction type");
