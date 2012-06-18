@@ -718,6 +718,44 @@ public:
     });)
 };
 
+class CTxInUndo
+{
+public:
+    CTxOut txout;       // the txout data before being spent
+    int nHeight;        // if the outpoint was the last unspent txout of a coinbase, its height; otherwise, -1
+
+    CTxInUndo() : txout(), nHeight(-1) {}
+    CTxInUndo(const CTxOut &txoutIn, int nHeightIn = -1) : txout(txoutIn), nHeight(nHeightIn) { }
+
+    unsigned int GetSerializeSize(int nType, int nVersion) const {
+        return ::GetSerializeSize(VARINT(nHeight+1), nType, nVersion) +
+               ::GetSerializeSize(CTxOutCompressor(REF(txout)), nType, nVersion);
+    }
+
+    template<typename Stream>
+    void Serialize(Stream &s, int nType, int nVersion) const {
+        ::Serialize(s, VARINT(nHeight+1), nType, nVersion);
+        ::Serialize(s, CTxOutCompressor(REF(txout)), nType, nVersion);
+    }
+
+    template<typename Stream>
+    void Unserialize(Stream &s, int nType, int nVersion) {
+        ::Unserialize(s, VARINT(nHeight), nType, nVersion);
+        ::Unserialize(s, CTxOutCompressor(REF(txout)), nType, nVersion);
+        nHeight--;
+    }
+};
+
+class CTxUndo
+{
+public:
+    std::vector<CTxInUndo> vprevout;
+
+    IMPLEMENT_SERIALIZE(
+        READWRITE(vprevout);
+    )
+};
+
 // ultra-pruned transaction: only retains height and unspent txouts
 class CCoins
 {
@@ -840,19 +878,23 @@ public:
         Cleanup();
     }
 
-    bool Spend(const COutPoint &out) {
+    bool Prune(const COutPoint &out, CTxInUndo &undo) {
         if (out.n >= vout.size())
             return false;
         if (vout[out.n].IsNull())
             return false;
+        undo = CTxInUndo(vout[out.n]);
         vout[out.n].SetNull();
         Cleanup();
+        if (vout.size() == 0)
+            undo.nHeight = nHeight;
         return true;
     }
 
-    bool Prune(int nPos) {
+    bool Spend(int nPos) {
+        CTxInUndo undo;
         COutPoint out(0, nPos);
-        return Spend(out);
+        return Prune(out, undo);
     }
 
     bool IsAvailable(unsigned int nPos) const {
