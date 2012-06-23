@@ -159,7 +159,6 @@ public:
     bool EraseFromWallet(uint256 hash);
     void WalletUpdateSpent(const CTransaction& prevout);
     int ScanForWalletTransactions(CBlockIndex* pindexStart, bool fUpdate = false);
-    int ScanForWalletTransaction(const uint256& hashTx);
     void ReacceptWalletTransactions();
     void ResendWalletTransactions();
     int64 GetBalance() const;
@@ -652,12 +651,12 @@ public:
     int64 GetTxTime() const;
     int GetRequestCount() const;
 
-    void AddSupportingTransactions(CTxDB& txdb);
+//    void AddSupportingTransactions(CTxDB& txdb);
 
-    bool AcceptWalletTransaction(CTxDB& txdb, bool fCheckInputs=true);
-    bool AcceptWalletTransaction();
+//    bool AcceptWalletTransaction(CTxDB& txdb, bool fCheckInputs=true);
+//    bool AcceptWalletTransaction();
 
-    void RelayWalletTransaction(CTxDB& txdb);
+    void RelayWalletTransaction(CCoinsDB& coinsdb);
     void RelayWalletTransaction();
 };
 

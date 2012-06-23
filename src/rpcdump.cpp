@@ -63,7 +63,7 @@ Value importprivkey(const Array& params, bool fHelp)
             throw JSONRPCError(-4,"Error adding key to wallet");
 
         pwalletMain->ScanForWalletTransactions(pindexGenesisBlock, true);
-        pwalletMain->ReacceptWalletTransactions();
+        // pwalletMain->ReacceptWalletTransactions();
     }
 
     return Value::null;

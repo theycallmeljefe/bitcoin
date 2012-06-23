@@ -676,6 +676,7 @@ void CWalletTx::GetAccountAmounts(const string& strAccount, int64& nReceived,
     }
 }
 
+/*
 void CWalletTx::AddSupportingTransactions(CTxDB& txdb)
 {
     vtxPrev.clear();
@@ -735,6 +736,7 @@ void CWalletTx::AddSupportingTransactions(CTxDB& txdb)
 
     reverse(vtxPrev.begin(), vtxPrev.end());
 }
+*/
 
 bool CWalletTx::WriteToDisk()
 {
@@ -766,18 +768,10 @@ int CWallet::ScanForWalletTransactions(CBlockIndex* pindexStart, bool fUpdate)
     return ret;
 }
 
-int CWallet::ScanForWalletTransaction(const uint256& hashTx)
-{
-    CTransaction tx;
-    tx.ReadFromDisk(COutPoint(hashTx, 0));
-    if (AddToWalletIfInvolvingMe(tx, NULL, true, true))
-        return 1;
-    return 0;
-}
-
+/*
 void CWallet::ReacceptWalletTransactions()
 {
-    CTxDB txdb("r");
+    CDB txdb("r");
     bool fRepeat = true;
     while (fRepeat)
     {
@@ -833,22 +827,23 @@ void CWallet::ReacceptWalletTransactions()
         }
     }
 }
+*/
 
-void CWalletTx::RelayWalletTransaction(CTxDB& txdb)
+void CWalletTx::RelayWalletTransaction(CCoinsDB& coinsdb)
 {
     BOOST_FOREACH(const CMerkleTx& tx, vtxPrev)
     {
         if (!tx.IsCoinBase())
         {
             uint256 hash = tx.GetHash();
-            if (!txdb.ContainsTx(hash))
+            if (!coinsdb.HaveCoins(hash))
                 RelayMessage(CInv(MSG_TX, hash), (CTransaction)tx);
         }
     }
     if (!IsCoinBase())
     {
         uint256 hash = GetHash();
-        if (!txdb.ContainsTx(hash))
+        if (!coinsdb.HaveCoins(hash))
         {
             printf("Relaying wtx %s\n", hash.ToString().substr(0,10).c_str());
             RelayMessage(CInv(MSG_TX, hash), (CTransaction)*this);
@@ -858,8 +853,8 @@ void CWalletTx::RelayWalletTransaction(CTxDB& txdb)
 
 void CWalletTx::RelayWalletTransaction()
 {
-   CTxDB txdb("r");
-   RelayWalletTransaction(txdb);
+   CCoinsDB coinsdb("r");
+   RelayWalletTransaction(coinsdb);
 }
 
 void CWallet::ResendWalletTransactions()
@@ -882,7 +877,7 @@ void CWallet::ResendWalletTransactions()
 
     // Rebroadcast any of our txes that aren't in a block yet
     printf("ResendWalletTransactions()\n");
-    CTxDB txdb("r");
+    CCoinsDB coinsdb("r");
     {
         LOCK(cs_wallet);
         // Sort them in chronological order
@@ -898,7 +893,7 @@ void CWallet::ResendWalletTransactions()
         BOOST_FOREACH(PAIRTYPE(const unsigned int, CWalletTx*)& item, mapSorted)
         {
             CWalletTx& wtx = *item.second;
-            wtx.RelayWalletTransaction(txdb);
+            wtx.RelayWalletTransaction(coinsdb);
         }
     }
 }
@@ -1153,8 +1148,6 @@ bool CWallet::CreateTransaction(const vector<pair<CScript, int64> >& vecSend, CW
 
     {
         LOCK2(cs_main, cs_wallet);
-        // txdb must be opened before the mapWallet lock
-        CTxDB txdb("r");
         {
             nFeeRet = nTransactionFee;
             loop
@@ -1244,7 +1237,7 @@ bool CWallet::CreateTransaction(const vector<pair<CScript, int64> >& vecSend, CW
                 }
 
                 // Fill vtxPrev by copying from previous transactions vtxPrev
-                wtxNew.AddSupportingTransactions(txdb);
+                // wtxNew.AddSupportingTransactions(coinsdb);
                 wtxNew.fTimeReceivedIsTxTime = true;
 
                 break;
