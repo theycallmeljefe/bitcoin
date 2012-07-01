@@ -571,14 +571,24 @@ bool CTxDB::LoadBlockIndex()
             return true;
         return error("CTxDB::LoadBlockIndex() : hashBestChain not loaded");
     }
-    if (!mapBlockIndex.count(hashBestChain))
+    std::map<uint256, CBlockIndex*>::iterator it = mapBlockIndex.find(hashBestChain);
+    if (it == mapBlockIndex.end()) {
         return error("CTxDB::LoadBlockIndex() : hashBestChain not found in the block index");
-    pindexBest = mapBlockIndex[hashBestChain];
-    nBestHeight = pindexBest->nHeight;
-    bnBestChainWork = pindexBest->bnChainWork;
-    printf("LoadBlockIndex(): hashBestChain=%s  height=%d  date=%s\n",
-      hashBestChain.ToString().substr(0,20).c_str(), nBestHeight,
-      DateTimeStrFormat("%x %H:%M:%S", pindexBest->GetBlockTime()).c_str());
+    } else {
+        // set 'next' pointers in best chain
+        CBlockIndex *pindex = it->second;
+        while(pindex != NULL && pindex->pprev != NULL) {
+             CBlockIndex *pindexPrev = pindex->pprev;
+             pindexPrev->pnext = pindex;
+             pindex = pindexPrev;
+        }
+        pindexBest = it->second;
+        nBestHeight = pindexBest->nHeight;
+        bnBestChainWork = pindexBest->bnChainWork;
+    }
+    printf("LoadBlockIndex(): hashBestChain=%s  height=%d date=%s\n",
+        hashBestChain.ToString().substr(0,20).c_str(), nBestHeight,
+        DateTimeStrFormat("%x %H:%M:%S", pindexBest->GetBlockTime()).c_str());
 
     // Load bnBestInvalidWork, OK if it doesn't exist
     ReadBestInvalidWork(bnBestInvalidWork);
@@ -741,7 +751,6 @@ bool CTxDB::LoadBlockIndexGuts()
             // Construct block index object
             CBlockIndex* pindexNew = InsertBlockIndex(diskindex.GetBlockHash());
             pindexNew->pprev          = InsertBlockIndex(diskindex.hashPrev);
-            pindexNew->pnext          = InsertBlockIndex(diskindex.hashNext);
             pindexNew->nHeight        = diskindex.nHeight;
             pindexNew->pos            = diskindex.pos;
             pindexNew->nUndoPos       = diskindex.nUndoPos;
