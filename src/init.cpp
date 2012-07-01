@@ -588,14 +588,6 @@ bool AppInit2()
 
     // ********************************************************* Step 6: load blockchain
 
-    if (GetBoolArg("-loadblockindextest"))
-    {
-        CTxDB txdb("r");
-        txdb.LoadBlockIndex();
-        PrintBlockTree();
-        return false;
-    }
-
     uiInterface.InitMessage(_("Loading block index..."));
     printf("Loading block index...\n");
     nStart = GetTimeMillis();
@@ -775,7 +767,7 @@ bool AppInit2()
         return InitError(strErrors.str());
 
      // Add wallet transactions that aren't already in a block to mapTransactions
-    pwalletMain->ReacceptWalletTransactions();
+    // pwalletMain->ReacceptWalletTransactions();
 
 #if !defined(QT_GUI)
     // Loop until process is exit()ed from shutdown() function,
