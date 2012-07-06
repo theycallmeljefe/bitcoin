@@ -1099,7 +1099,7 @@ void FileCommit(FILE *fileout)
 #ifdef WIN32
     _commit(_fileno(fileout));
 #else
-    fsync(fileno(fileout));
+    fdatasync(fileno(fileout));
 #endif
 }
 

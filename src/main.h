@@ -92,7 +92,7 @@ class CCoinsView;
 void RegisterWallet(CWallet* pwalletIn);
 void UnregisterWallet(CWallet* pwalletIn);
 void SyncWithWallets(const CTransaction& tx, const CBlock* pblock = NULL, bool fUpdate = false);
-bool ProcessBlock(CNode* pfrom, CBlock* pblock);
+bool ProcessBlock(CNode* pfrom, CBlock* pblock, bool fAllowBatch = true);
 bool CheckDiskSpace(uint64 nAdditionalBytes=0);
 FILE* OpenBlockFile(const CDiskBlockPos &pos, bool fReadOnly = false);
 FILE* OpenUndoFile(const CDiskBlockPos &pos, bool fReadOnly = false);
@@ -689,7 +689,7 @@ public:
     bool CheckInputs(CCoinsView &view, enum CheckSig_mode csmode, bool fStrictPayToScriptHash=true, bool fStrictEncodings=true) const;
     bool UpdateCoins(CCoinsView &view, CTxUndo &txundo, int nHeight) const;
     bool CheckTransaction() const;
-    bool AcceptToMemoryPool(CCoinsDB& txdb, bool fCheckInputs=true, bool* pfMissingInputs=NULL);
+    bool AcceptToMemoryPool(bool fCheckInputs=true, bool* pfMissingInputs=NULL);
 
 protected:
     static CTxOut GetOutputFor(const CTxIn& input, CCoinsView& mapInputs);
@@ -774,6 +774,7 @@ public:
 
     bool WriteToDisk(CDiskBlockPos &pos)
     {
+
         // Open history file to append
         CAutoFile fileout = CAutoFile(OpenUndoFile(pos), SER_DISK, CLIENT_VERSION);
         if (!fileout)
@@ -792,8 +793,11 @@ public:
 
         // Flush stdio buffers and commit to disk before returning
         fflush(fileout);
-        if (!IsInitialBlockDownload() || (nBestHeight+1) % 500 == 0)
+        static int nBlocksWithoutCommit = 0;
+        if (!IsInitialBlockDownload() || ++nBlocksWithoutCommit >= 500) {
+            nBlocksWithoutCommit = 0;
             FileCommit(fileout);
+        }
 
         return true;
     }
@@ -1002,8 +1006,7 @@ public:
     int GetDepthInMainChain() const { CBlockIndex *pindexRet; return GetDepthInMainChain(pindexRet); }
     bool IsInMainChain() const { return GetDepthInMainChain() > 0; }
     int GetBlocksToMaturity() const;
-    bool AcceptToMemoryPool(CCoinsDB& txdb, bool fCheckInputs=true);
-    bool AcceptToMemoryPool();
+    bool AcceptToMemoryPool(bool fCheckInputs=true);
 };
 
 
@@ -1216,8 +1219,11 @@ public:
 
         // Flush stdio buffers and commit to disk before returning
         fflush(fileout);
-        if (!IsInitialBlockDownload() || (nBestHeight+1) % 500 == 0)
+        static int nBlocksWithoutCommit = 0;
+        if (!IsInitialBlockDownload() || ++nBlocksWithoutCommit >= 500) {
+            nBlocksWithoutCommit = 0;
             FileCommit(fileout);
+        }
 
         return true;
     }
@@ -1275,9 +1281,9 @@ public:
     bool ConnectBlock(CBlockIndex *pindex, CCoinsView &coins, bool fJustCheck=false);
     bool ReadFromDisk(const CBlockIndex* pindex, bool fReadTransactions=true);
     bool SetBestChain(CBlockIndex* pindexNew);
-    bool AddToBlockIndex(const CDiskBlockPos &pos);
+    bool AddToBlockIndex(const CDiskBlockPos &pos, bool fAllowBatch = true);
     bool CheckBlock(bool fCheckPOW=true, bool fCheckMerkleRoot=true) const;
-    bool AcceptBlock();
+    bool AcceptBlock(bool fAllowBatch = true);
 };
 
 
@@ -1716,8 +1722,7 @@ public:
     std::map<uint256, CTransaction> mapTx;
     std::map<COutPoint, CInPoint> mapNextTx;
 
-    bool accept(CCoinsDB& txdb, CTransaction &tx,
-                bool fCheckInputs, bool* pfMissingInputs);
+    bool accept(CTransaction &tx, bool fCheckInputs, bool* pfMissingInputs);
     bool addUnchecked(const uint256& hash, CTransaction &tx);
     bool remove(CTransaction &tx);
     void clear();
@@ -1751,6 +1756,7 @@ public:
     virtual bool HaveCoins(uint256 txid);
     virtual CBlockIndex *GetBestBlock();
     virtual bool SetBestBlock(CBlockIndex *pindex);
+    virtual bool BatchWrite(const std::map<uint256, CCoins> &mapCoins, CBlockIndex *pindex);
 };
 
 /** CCoinsView backed by another CCoinsView */
@@ -1767,21 +1773,7 @@ public:
     CBlockIndex *GetBestBlock();
     bool SetBestBlock(CBlockIndex *pindex);
     void SetBackend(CCoinsView &viewIn);
-};
-
-
-/** CCoinsView backed by a CTxDB */
-class CCoinsViewDB : public CCoinsView
-{
-protected:
-    CCoinsDB &db;
-public:
-    CCoinsViewDB(CCoinsDB &dbIn);
-    bool GetCoins(uint256 txid, CCoins &coins);
-    bool SetCoins(uint256 txid, const CCoins &coins);
-    bool HaveCoins(uint256 txid);
-    CBlockIndex *GetBestBlock();
-    bool SetBestBlock(CBlockIndex *pindex);
+    bool BatchWrite(const std::map<uint256, CCoins> &mapCoins, CBlockIndex *pindex);
 };
 
 /** CCoinsView that adds a memory cache for transaction to another CCoinsView */
@@ -1798,7 +1790,9 @@ public:
     bool HaveCoins(uint256 txid);
     CBlockIndex *GetBestBlock();
     bool SetBestBlock(CBlockIndex *pindex);
+    bool BatchWrite(const std::map<uint256, CCoins> &mapCoins, CBlockIndex *pindex);
     bool Flush();
+    unsigned int GetCacheSize();
 };
 
 /** CCoinsView that brings transactions from a memorypool into view.
@@ -1813,5 +1807,7 @@ public:
     bool GetCoins(uint256 txid, CCoins &coins);
     bool HaveCoins(uint256 txid);
 };
+
+extern CCoinsViewCache *pcoinsTip;
 
 #endif
