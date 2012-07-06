@@ -829,32 +829,27 @@ void CWallet::ReacceptWalletTransactions()
 }
 */
 
-void CWalletTx::RelayWalletTransaction(CCoinsDB& coinsdb)
+void CWalletTx::RelayWalletTransaction()
 {
+    CCoinsViewCache& coins = *pcoinsTip;
     BOOST_FOREACH(const CMerkleTx& tx, vtxPrev)
     {
         if (!tx.IsCoinBase())
         {
             uint256 hash = tx.GetHash();
-            if (!coinsdb.HaveCoins(hash))
+            if (!coins.HaveCoins(hash))
                 RelayMessage(CInv(MSG_TX, hash), (CTransaction)tx);
         }
     }
     if (!IsCoinBase())
     {
         uint256 hash = GetHash();
-        if (!coinsdb.HaveCoins(hash))
+        if (!coins.HaveCoins(hash))
         {
             printf("Relaying wtx %s\n", hash.ToString().substr(0,10).c_str());
             RelayMessage(CInv(MSG_TX, hash), (CTransaction)*this);
         }
     }
-}
-
-void CWalletTx::RelayWalletTransaction()
-{
-   CCoinsDB coinsdb("r");
-   RelayWalletTransaction(coinsdb);
 }
 
 void CWallet::ResendWalletTransactions()
@@ -877,7 +872,6 @@ void CWallet::ResendWalletTransactions()
 
     // Rebroadcast any of our txes that aren't in a block yet
     printf("ResendWalletTransactions()\n");
-    CCoinsDB coinsdb("r");
     {
         LOCK(cs_wallet);
         // Sort them in chronological order
@@ -893,7 +887,7 @@ void CWallet::ResendWalletTransactions()
         BOOST_FOREACH(PAIRTYPE(const unsigned int, CWalletTx*)& item, mapSorted)
         {
             CWalletTx& wtx = *item.second;
-            wtx.RelayWalletTransaction(coinsdb);
+            wtx.RelayWalletTransaction();
         }
     }
 }

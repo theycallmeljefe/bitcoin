@@ -84,6 +84,7 @@ protected:
     explicit CDB(const char* pszFile, const char* pszMode="r+");
     ~CDB() { Close(); }
 public:
+    void Flush();
     void Close();
 private:
     CDB(const CDB&);
@@ -312,6 +313,23 @@ public:
     bool WriteHashBestChain(uint256 hashBestChain);
 };
 
+
+/** CCoinsView backed by a CCoinsDB */
+class CCoinsViewDB : public CCoinsView
+{
+protected:
+    CCoinsDB db;
+public:
+    CCoinsViewDB();
+    bool GetCoins(uint256 txid, CCoins &coins);
+    bool SetCoins(uint256 txid, const CCoins &coins);
+    bool HaveCoins(uint256 txid);
+    CBlockIndex *GetBestBlock();
+    bool SetBestBlock(CBlockIndex *pindex);
+    bool BatchWrite(const std::map<uint256, CCoins> &mapCoins, CBlockIndex *pindex);
+};
+
+
 /** Access to the block database (chain.dat) */
 class CChainDB : public CDB
 {
@@ -332,7 +350,7 @@ public:
 };
 
 
-bool LoadBlockIndex(CCoinsDB &coinsdb, CChainDB &chaindb);
+bool LoadBlockIndex(CChainDB &chaindb);
 
 
 /** Access to the (IP) address database (peers.dat) */

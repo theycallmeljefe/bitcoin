@@ -656,7 +656,6 @@ public:
 //    bool AcceptWalletTransaction(CTxDB& txdb, bool fCheckInputs=true);
 //    bool AcceptWalletTransaction();
 
-    void RelayWalletTransaction(CCoinsDB& coinsdb);
     void RelayWalletTransaction();
 };
 
