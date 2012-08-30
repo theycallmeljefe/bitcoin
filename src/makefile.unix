@@ -4,6 +4,7 @@
 
 USE_UPNP:=0
 USE_IPV6:=1
+USE_LEVELDB:=1
 
 LINK:=$(CXX)
 
@@ -131,6 +132,18 @@ OBJS= \
 
 
 all: bitcoind
+
+#
+# LevelDB support
+#
+ifdef USE_LEVELDB
+LIBS += $(CURDIR)/leveldb-1.5.0/libleveldb.a $(CURDIR)/leveldb-1.5.0/libmemenv.a
+DEFS += $(addprefix -I,$(CURDIR)/leveldb-1.5.0/include) -DUSE_LEVELDB
+DEFS += $(addprefix -I,$(CURDIR)/leveldb-1.5.0/helpers)
+leveldb-1.5.0/libleveldb.a:
+	@echo "Building LevelDB ..."; cd leveldb-1.5.0; make libleveldb.a libmemenv.a; cd ..;
+obj/db.o: leveldb-1.5.0/libleveldb.a
+endif
 
 # auto-generated dependencies:
 -include obj/*.P
