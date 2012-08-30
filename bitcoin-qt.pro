@@ -88,6 +88,24 @@ contains(BITCOIN_NEED_QT_PLUGINS, 1) {
     QTPLUGIN += qcncodecs qjpcodecs qtwcodecs qkrcodecs qtaccessiblewidgets
 }
 
+contains(USE_LEVELDB, -) {
+    message(Building without LevelDB)
+} else {
+    message(Building with LevelDB)
+    DEFINES += USE_LEVELDB
+    INCLUDEPATH += src/leveldb-1.5.0/include src/leveldb-1.5.0/helpers
+    LIBS += $$PWD/src/leveldb-1.5.0/libleveldb.a $$PWD/src/leveldb-1.5.0/libmemenv.a
+    !windows {
+        genleveldb.commands = cd $$PWD/src/leveldb-1.5.0 ; make libleveldb.a libmemenv.a
+    } else {
+        # make an educated guess about what the ranlib command is called
+        isEmpty(QMAKE_RANLIB) {
+            QMAKE_RANLIB = $$replace(QMAKE_STRIP, strip, ranlib)
+        }
+        genleveldb.commands = cd $$PWD/src/leveldb-1.5.0 ; CC=$$QMAKE_CC CXX=$$QMAKE_CXX TARGET_OS=OS_WINDOWS_CROSSCOMPILE CXXFLAGS="-I$$BOOST_INCLUDE_PATH" LDFLAGS="-L$$BOOST_LIB_PATH" make libleveldb.a libmemenv.a ; $$QMAKE_RANLIB $$PWD/src/leveldb-1.5.0/libleveldb.a
+    }
+}
+
 !windows {
     # for extra security against potential buffer overflows
     QMAKE_CXXFLAGS += -fstack-protector
