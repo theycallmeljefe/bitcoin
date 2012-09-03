@@ -95,6 +95,7 @@ contains(USE_LEVELDB, -) {
     DEFINES += USE_LEVELDB
     INCLUDEPATH += src/leveldb-1.5.0/include src/leveldb-1.5.0/helpers
     LIBS += $$PWD/src/leveldb-1.5.0/libleveldb.a $$PWD/src/leveldb-1.5.0/libmemenv.a
+    SOURCES += src/leveldb.cpp
     !windows {
         genleveldb.commands = cd $$PWD/src/leveldb-1.5.0 ; make libleveldb.a libmemenv.a
     } else {
