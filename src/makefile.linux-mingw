@@ -91,11 +91,12 @@ ifdef USE_LEVELDB
 LIBS += $(CURDIR)/leveldb-1.5.0/libleveldb.a $(CURDIR)/leveldb-1.5.0/libmemenv.a
 DEFS += -I"$(CURDIR)/leveldb-1.5.0/include" -DUSE_LEVELDB
 DEFS += -I"$(CURDIR)/leveldb-1.5.0/helpers"
-OBJS += obj/leveldb.o
+OBJS += obj/leveldb.o obj/txdb-leveldb.o
 leveldb-1.5.0/libleveldb.a:
 	@echo "Building LevelDB ..."; cd leveldb-1.5.0; TARGET_OS=OS_WINDOWS_CROSSCOMPILE CXXFLAGS="-I$(INCLUDEPATHS)" LDFLAGS="-L$(LIBPATHS)" make libleveldb.a libmemenv.a; cd ..
 obj/leveldb.o: leveldb-1.5.0/libleveldb.a
->>>>>>> d3bedd7... LevelDB glue
+else
+OBJS += obj/txdb-bdb.o
 endif
 
 obj/build.h: FORCE
