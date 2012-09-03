@@ -268,6 +268,7 @@ bool CCoinsViewMemPool::HaveCoins(uint256 txid) {
 }
 
 CCoinsViewCache *pcoinsTip = NULL;
+CBlockTreeDB *pblocktree = NULL;
 
 //////////////////////////////////////////////////////////////////////////////
 //
@@ -1087,7 +1088,7 @@ void static InvalidChainFound(CBlockIndex* pindexNew)
     if (pindexNew->bnChainWork > bnBestInvalidWork)
     {
         bnBestInvalidWork = pindexNew->bnChainWork;
-        CChainDB().WriteBestInvalidWork(bnBestInvalidWork);
+        pblocktree->WriteBestInvalidWork(bnBestInvalidWork);
         uiInterface.NotifyBlocksChanged();
     }
     printf("InvalidChainFound: invalid block=%s  height=%d  work=%s  date=%s\n",
@@ -1103,7 +1104,7 @@ void static InvalidChainFound(CBlockIndex* pindexNew)
 
 void static InvalidBlockFound(CBlockIndex *pindex) {
     pindex->nStatus |= BLOCK_FAILED_VALID;
-    CChainDB().WriteBlockIndex(CDiskBlockIndex(pindex));
+    pblocktree->WriteBlockIndex(CDiskBlockIndex(pindex));
     setBlockIndexValid.erase(pindex);
     InvalidChainFound(pindex);
     if (pindex->pnext)
@@ -1130,12 +1131,11 @@ bool ConnectBestBlock() {
         do {
             if (pindexTest->nStatus & BLOCK_FAILED_MASK) {
                 // mark descendants failed
-                CChainDB chaindb;
                 CBlockIndex *pindexFailed = pindexNewBest;
                 while (pindexTest != pindexFailed) {
                     pindexFailed->nStatus |= BLOCK_FAILED_CHILD;
                     setBlockIndexValid.erase(pindexFailed);
-                    chaindb.WriteBlockIndex(CDiskBlockIndex(pindexFailed));
+                    pblocktree->WriteBlockIndex(CDiskBlockIndex(pindexFailed));
                     pindexFailed = pindexFailed->pprev;
                 }
                 InvalidChainFound(pindexNewBest);
@@ -1438,7 +1438,7 @@ bool CBlock::DisconnectBlock(CBlockIndex *pindex, CCoinsViewCache &view)
     return true;
 }
 
-bool FindUndoPos(CChainDB &txdb, int nFile, CDiskBlockPos &pos, unsigned int nAddSize);
+bool FindUndoPos(int nFile, CDiskBlockPos &pos, unsigned int nAddSize);
 
 bool CBlock::ConnectBlock(CBlockIndex* pindex, CCoinsViewCache &view, bool fJustCheck)
 {
@@ -1515,11 +1515,9 @@ bool CBlock::ConnectBlock(CBlockIndex* pindex, CCoinsViewCache &view, bool fJust
     // Write undo information to disk
     if (pindex->GetUndoPos().IsNull() || (pindex->nStatus & BLOCK_VALID_MASK) < BLOCK_VALID_SCRIPTS)
     {
-        CChainDB chaindb;
-
         if (pindex->GetUndoPos().IsNull()) {
             CDiskBlockPos pos;
-            if (!FindUndoPos(chaindb, pindex->nFile, pos, ::GetSerializeSize(blockundo, SER_DISK, CLIENT_VERSION) + 8))
+            if (!FindUndoPos(pindex->nFile, pos, ::GetSerializeSize(blockundo, SER_DISK, CLIENT_VERSION) + 8))
                 return error("ConnectBlock() : FindUndoPos failed");
             if (!blockundo.WriteToDisk(pos))
                 return error("ConnectBlock() : CBlockUndo::WriteToDisk failed");
@@ -1532,7 +1530,7 @@ bool CBlock::ConnectBlock(CBlockIndex* pindex, CCoinsViewCache &view, bool fJust
         pindex->nStatus = (pindex->nStatus & ~BLOCK_VALID_MASK) | BLOCK_VALID_SCRIPTS;
 
         CDiskBlockIndex blockindex(pindex);
-        if (!chaindb.WriteBlockIndex(blockindex))
+        if (!pblocktree->WriteBlockIndex(blockindex))
             return error("ConnectBlock() : WriteBlockIndex failed");
     }
 
@@ -1737,12 +1735,7 @@ bool CBlock::AddToBlockIndex(const CDiskBlockPos &pos, bool fAllowBatch)
     pindexNew->nStatus = BLOCK_VALID_TRANSACTIONS | BLOCK_HAVE_DATA;
     setBlockIndexValid.insert(pindexNew);
 
-    CChainDB chaindb;
-    if (!chaindb.TxnBegin())
-        return false;
-    chaindb.WriteBlockIndex(CDiskBlockIndex(pindexNew));
-    if (!chaindb.TxnCommit())
-        return false;
+    pblocktree->WriteBlockIndex(CDiskBlockIndex(pindexNew));
 
     // New best?
     if (!ConnectBestBlock())
@@ -1756,13 +1749,15 @@ bool CBlock::AddToBlockIndex(const CDiskBlockPos &pos, bool fAllowBatch)
         hashPrevBestCoinBase = GetTxHash(0);
     }
 
+    pblocktree->Flush();
+
     uiInterface.NotifyBlocksChanged();
     return true;
 }
 
 
 
-bool FindBlockPos(CChainDB &chaindb, CDiskBlockPos &pos, unsigned int nAddSize, unsigned int nHeight, uint64 nTime)
+bool FindBlockPos(CDiskBlockPos &pos, unsigned int nAddSize, unsigned int nHeight, uint64 nTime)
 {
     bool fUpdatedLast = false;
 
@@ -1772,7 +1767,7 @@ bool FindBlockPos(CChainDB &chaindb, CDiskBlockPos &pos, unsigned int nAddSize, 
         printf("Leaving block file %i: %s\n", nLastBlockFile, infoLastBlockFile.ToString().c_str());
         nLastBlockFile++;
         infoLastBlockFile.SetNull();
-        chaindb.ReadBlockFileInfo(nLastBlockFile, infoLastBlockFile); // check whether data for the new file somehow already exist; can fail just fine
+        pblocktree->ReadBlockFileInfo(nLastBlockFile, infoLastBlockFile); // check whether data for the new file somehow already exist; can fail just fine
         fUpdatedLast = true;
     }
 
@@ -1792,15 +1787,15 @@ bool FindBlockPos(CChainDB &chaindb, CDiskBlockPos &pos, unsigned int nAddSize, 
         fclose(file);
     }
 
-    if (!chaindb.WriteBlockFileInfo(nLastBlockFile, infoLastBlockFile))
+    if (!pblocktree->WriteBlockFileInfo(nLastBlockFile, infoLastBlockFile))
         return error("FindBlockPos() : cannot write updated block info");
     if (fUpdatedLast)
-        chaindb.WriteLastBlockFile(nLastBlockFile);
+        pblocktree->WriteLastBlockFile(nLastBlockFile);
 
     return true;
 }
 
-bool FindUndoPos(CChainDB &chaindb, int nFile, CDiskBlockPos &pos, unsigned int nAddSize)
+bool FindUndoPos(int nFile, CDiskBlockPos &pos, unsigned int nAddSize)
 {
     pos.nFile = nFile;
 
@@ -1810,15 +1805,15 @@ bool FindUndoPos(CChainDB &chaindb, int nFile, CDiskBlockPos &pos, unsigned int 
     if (nFile == nLastBlockFile) {
         pos.nPos = infoLastBlockFile.nUndoSize;
         nNewSize = (infoLastBlockFile.nUndoSize += nAddSize);
-        if (!chaindb.WriteBlockFileInfo(nLastBlockFile, infoLastBlockFile))
+        if (!pblocktree->WriteBlockFileInfo(nLastBlockFile, infoLastBlockFile))
             return error("FindUndoPos() : cannot write updated block info");
     } else {
         CBlockFileInfo info;
-        if (!chaindb.ReadBlockFileInfo(nFile, info))
+        if (!pblocktree->ReadBlockFileInfo(nFile, info))
             return error("FindUndoPos() : cannot read block info");
         pos.nPos = info.nUndoSize;
         nNewSize = (info.nUndoSize += nAddSize);
-        if (!chaindb.WriteBlockFileInfo(nFile, info))
+        if (!pblocktree->WriteBlockFileInfo(nFile, info))
             return error("FindUndoPos() : cannot write updated block info");
     }
 
@@ -1949,11 +1944,8 @@ bool CBlock::AcceptBlock(bool fAllowBatch)
     if (!CheckDiskSpace(::GetSerializeSize(*this, SER_DISK, CLIENT_VERSION)))
         return error("AcceptBlock() : out of disk space");
     CDiskBlockPos blockPos;
-    {
-        CChainDB chaindb;
-        if (!FindBlockPos(chaindb, blockPos, nBlockSize+8, nHeight, nTime))
-            return error("AcceptBlock() : FindBlockPos failed");
-    }
+    if (!FindBlockPos(blockPos, nBlockSize+8, nHeight, nTime))
+        return error("AcceptBlock() : FindBlockPos failed");
     if (!WriteToDisk(blockPos))
         return error("AcceptBlock() : WriteToDisk failed");
     if (!AddToBlockIndex(blockPos, fAllowBatch))
@@ -2137,12 +2129,10 @@ bool LoadBlockIndex(bool fAllowNew)
     }
 
     //
-    // Load block index
+    // Load block index from databases
     //
-    CChainDB chaindb("cr");
-    if (!LoadBlockIndex(chaindb))
+    if (!LoadBlockIndexDB())
         return false;
-    chaindb.Close();
 
     //
     // Init with genesis block
@@ -2194,11 +2184,8 @@ bool LoadBlockIndex(bool fAllowNew)
         // Start new block file
         unsigned int nBlockSize = ::GetSerializeSize(block, SER_DISK, CLIENT_VERSION);
         CDiskBlockPos blockPos;
-        {
-            CChainDB chaindb;
-            if (!FindBlockPos(chaindb, blockPos, nBlockSize+8, 0, block.nTime))
-                return error("AcceptBlock() : FindBlockPos failed");
-        }
+        if (!FindBlockPos(blockPos, nBlockSize+8, 0, block.nTime))
+            return error("AcceptBlock() : FindBlockPos failed");
         if (!block.WriteToDisk(blockPos))
             return error("LoadBlockIndex() : writing genesis block to disk failed");
         if (!block.AddToBlockIndex(blockPos, false))

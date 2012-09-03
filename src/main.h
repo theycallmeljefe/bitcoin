@@ -85,7 +85,7 @@ static const uint64 nMinDiskSpace = 52428800;
 
 class CReserveKey;
 class CCoinsDB;
-class CChainDB;
+class CBlockTreeDB;
 class CTxIndex;
 class CDiskBlockPos;
 class CCoins;
@@ -2084,5 +2084,7 @@ public:
 };
 
 extern CCoinsViewCache *pcoinsTip;
+
+extern CBlockTreeDB *pblocktree;
 
 #endif
