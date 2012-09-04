@@ -808,9 +808,8 @@ bool CMerkleTx::AcceptToMemoryPool(bool fCheckInputs)
 
 
 
-/* bool CWalletTx::AcceptWalletTransaction(CTxDB& txdb, bool fCheckInputs)
+bool CWalletTx::AcceptWalletTransaction(bool fCheckInputs)
 {
-
     {
         LOCK(mempool.cs);
         // Add previous supporting transactions first
@@ -819,20 +818,15 @@ bool CMerkleTx::AcceptToMemoryPool(bool fCheckInputs)
             if (!tx.IsCoinBase())
             {
                 uint256 hash = tx.GetHash();
-                if (!mempool.exists(hash) && !txdb.ContainsCoins(hash))
-                    tx.AcceptToMemoryPool(txdb, fCheckInputs);
+                if (!mempool.exists(hash) && pcoinsTip->HaveCoins(hash))
+                    tx.AcceptToMemoryPool(fCheckInputs);
             }
         }
-        return AcceptToMemoryPool(txdb, fCheckInputs);
+        return AcceptToMemoryPool(fCheckInputs);
     }
     return false;
 }
 
-bool CWalletTx::AcceptWalletTransaction()
-{
-    CTxDB txdb("r");
-    return AcceptWalletTransaction(txdb);
-} */
 
 int CTxIndex::GetDepthInMainChain() const
 {

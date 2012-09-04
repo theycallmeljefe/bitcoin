@@ -651,11 +651,8 @@ public:
     int64 GetTxTime() const;
     int GetRequestCount() const;
 
-//    void AddSupportingTransactions(CTxDB& txdb);
-
-//    bool AcceptWalletTransaction(CTxDB& txdb, bool fCheckInputs=true);
-//    bool AcceptWalletTransaction();
-
+    void AddSupportingTransactions();
+    bool AcceptWalletTransaction(bool fCheckInputs=true);
     void RelayWalletTransaction();
 };
 
