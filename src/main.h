@@ -11,10 +11,12 @@
 #include "script.h"
 
 #include <list>
+#include <queue>
 
 class CWallet;
 class CBlock;
 class CBlockIndex;
+class CSigCheck;
 class CKeyItem;
 class CReserveKey;
 
@@ -75,6 +77,7 @@ extern int64 nTimeBestReceived;
 extern CCriticalSection cs_setpwalletRegistered;
 extern std::set<CWallet*> setpwalletRegistered;
 extern unsigned char pchMessageStart[4];
+extern int nSigThreads;
 
 // Settings
 extern int64 nTransactionFee;
@@ -120,7 +123,7 @@ bool GetTransaction(const uint256 &hash, CTransaction &tx, uint256 &hashBlock, b
 bool SetBestChain(CBlockIndex* pindexNew);
 bool ConnectBestBlock();
 CBlockIndex * InsertBlockIndex(uint256 hash);
-bool VerifySignature(const CCoins& txFrom, const CTransaction& txTo, unsigned int nIn, bool fValidatePayToScriptHash, bool fStrictEncodings, int nHashType);
+void ThreadSigCheck(void *parg);
 
 
 
@@ -424,6 +427,8 @@ enum CheckSig_mode
     CS_ALWAYS
 };
 
+
+
 /** The basic transaction that is broadcasted on the network and contained in
  * blocks.  A transaction can contain multiple inputs and outputs.
  */
@@ -695,7 +700,7 @@ public:
 
     bool ClientCheckInputs() const;
     bool HaveInputs(CCoinsViewCache &view) const;
-    bool CheckInputs(CCoinsViewCache &view, enum CheckSig_mode csmode, bool fStrictPayToScriptHash=true, bool fStrictEncodings=true) const;
+    bool CheckInputs(CCoinsViewCache &view, std::vector<CSigCheck*> *pvSigs, bool fSignatureChecks = true, bool fStrictPayToScriptHash=true, bool fStrictEncodings=true) const;
     bool UpdateCoins(CCoinsViewCache &view, CTxUndo &txundo, int nHeight, const uint256 &txhash) const;
     bool CheckTransaction() const;
     bool AcceptToMemoryPool(bool fCheckInputs=true, bool* pfMissingInputs=NULL);
@@ -968,6 +973,28 @@ public:
     }
 };
 
+class CSigCheck
+{
+public:
+    CScript scriptPubKey;
+    CTransaction txTo;
+    unsigned int nIn;
+    bool fValidatePayToScriptHash;
+    bool fStrictEncodings;
+    int nHashType;
+
+    CSigCheck(const CCoins& txFromIn, const CTransaction& txToIn, unsigned int nInIn, bool fValidatePayToScriptHashIn, bool fStrictEncodingsIn, int nHashTypeIn) :
+        scriptPubKey(txFromIn.vout[txToIn.vin[nInIn].prevout.n].scriptPubKey),
+        txTo(txToIn), nIn(nInIn), fValidatePayToScriptHash(fValidatePayToScriptHashIn), 
+        fStrictEncodings(fStrictEncodingsIn), nHashType(nHashTypeIn) { }
+
+    bool operator()() const {
+        const CScript &scriptSig = txTo.vin[nIn].scriptSig;
+        return VerifyScript(scriptSig, scriptPubKey, txTo, nIn, fValidatePayToScriptHash, fStrictEncodings, nHashType);
+    }
+};
+
+typedef std::pair<CSigCheck*, CBlockIndex*> CSigCheckJob;
 
 
 /** A transaction with a merkle branch linking it to the block chain. */
@@ -1642,6 +1669,40 @@ public:
 };
 
 
+class CSigCheckQueue
+{
+private:
+    unsigned int nMaxQueue;
+    int nElem;
+    int nPar;
+    bool fRun;
+    int nRunning;
+
+    boost::mutex cs_queue;
+    boost::condition_variable cond_full;
+    boost::condition_variable cond_empty;
+
+    std::queue<CSigCheckJob> queueSigs;
+    std::map<CBlockIndex*, int> mapSigsLeft;
+    std::set<CBlockIndex*> setComplete;
+
+protected:
+
+    // assumes lock on cs_queue
+    void Done(CBlockIndex *pindex);
+
+public:
+    CSigCheckQueue(unsigned int nMaxQueueIn = 80, int nElemIn = 8) : nMaxQueue(nMaxQueueIn), nElem(nElemIn), fRun(true), nRunning(0) { }
+
+    void Stop();
+    void Add(CBlockIndex *pindex, const std::vector<CSigCheck*> &checks);
+    void Complete(CBlockIndex *pindex);
+
+    // Process up to nElem elements, but not more than 1/nPar of the remaining count (rounded up)
+    void Process();
+};
+
+extern CSigCheckQueue checkqueue;
 
 
 

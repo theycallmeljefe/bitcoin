@@ -56,6 +56,7 @@ const string strMessageMagic = "Bitcoin Signed Message:\n";
 
 double dHashesPerSec;
 int64 nHPSTimerStart;
+int nSigThreads = 2;
 
 // Settings
 int64 nTransactionFee = 0;
@@ -675,7 +676,7 @@ bool CTxMemPool::accept(CTransaction &tx, bool fCheckInputs,
 
         // Check against previous transactions
         // This is done last to help prevent CPU exhaustion denial-of-service attacks.
-        if (!tx.CheckInputs(view, CS_ALWAYS, true, false))
+        if (!tx.CheckInputs(view, NULL, true, false))
         {
             return error("CTxMemPool::accept() : ConnectInputs failed %s", hash.ToString().substr(0,10).c_str());
         }
@@ -1247,18 +1248,129 @@ bool CTransaction::HaveInputs(CCoinsViewCache &inputs) const
     return true;
 }
 
-bool VerifySignature(const CCoins& txFrom, const CTransaction& txTo, unsigned int nIn, bool fValidatePayToScriptHash, bool fStrictEncodings, int nHashType)
-{
-    assert(nIn < txTo.vin.size());
-    const CTxIn& txin = txTo.vin[nIn];
-    if (txin.prevout.n >= txFrom.vout.size())
-        return false;
-    const CTxOut& txout = txFrom.vout[txin.prevout.n];
-
-    return VerifyScript(txin.scriptSig, txout.scriptPubKey, txTo, nIn, fValidatePayToScriptHash, fStrictEncodings, nHashType);
+void CSigCheckQueue::Done(CBlockIndex *pindex) {
+    if (!(pindex->nStatus & BLOCK_FAILED_VALID)) { // todo: some locking on nStatus; perhaps a separate field for sig validation?
+        pindex->nStatus = (pindex->nStatus & ~BLOCK_VALID_MASK) | BLOCK_VALID_SCRIPTS;
+        // pblocktree->WriteBlockIndex(CDiskBlockIndex(pindex));
+    }
+    mapSigsLeft.erase(pindex);
 }
 
-bool CTransaction::CheckInputs(CCoinsViewCache &inputs, enum CheckSig_mode csmode, bool fStrictPayToScriptHash, bool fStrictEncodings) const
+void CSigCheckQueue::Stop() {
+    fRun = false;
+    cond_empty.notify_all();
+    cond_full.notify_all();
+    boost::unique_lock<boost::mutex> lock(cs_queue);
+    while (nRunning > 0)
+        cond_full.wait(lock);
+}
+
+void CSigCheckQueue::Add(CBlockIndex *pindex, const std::vector<CSigCheck*> &checks) {
+    boost::unique_lock<boost::mutex> lock(cs_queue);
+
+    unsigned int nDone = 0;
+    nRunning++;
+    while (nDone < checks.size()) {
+        // wait until there is space in the queue
+        while (fRun && queueSigs.size() >= nMaxQueue)
+            cond_full.wait(lock);
+        if (!fRun)
+            break;
+        // add some elements
+        unsigned int nNow = std::min(checks.size() - nDone, nMaxQueue - queueSigs.size());
+        for (unsigned int nPos=nDone; nPos < nDone+nNow; nPos++)
+            queueSigs.push(std::make_pair(checks[nPos], pindex));
+        mapSigsLeft[pindex] += nNow;
+        nDone += nNow;
+        // notify checksig thread
+        cond_empty.notify_one();
+    }
+    nRunning--;
+}
+
+void CSigCheckQueue::Complete(CBlockIndex *pindex) {
+    boost::unique_lock<boost::mutex> lock(cs_queue);
+
+    if (mapSigsLeft[pindex] == 0) {
+        Done(pindex);
+    } else {
+        setComplete.insert(pindex);
+    }
+}
+
+void CSigCheckQueue::Process() {
+    std::vector<CSigCheckJob> vTodo;
+
+    { // first pop elements from the queue
+        boost::unique_lock<boost::mutex> lock(cs_queue);
+
+
+        while (fRun && queueSigs.empty())
+            cond_empty.wait(lock);
+        if (!fRun)
+            return;
+
+        int n = (queueSigs.size() + 1) / 2;
+        if (n > nElem)
+            n = nElem;
+        vTodo.reserve(n);
+        for (int i=0; i<n; i++) {
+            vTodo.push_back(queueSigs.front());
+            queueSigs.pop();
+        }
+
+        // before starting the actual processing, if more elements remain on the queue, wake another thread
+        if (!queueSigs.empty())
+            cond_empty.notify_one();
+
+        cond_full.notify_all();
+        nRunning++;
+    }
+
+    // do actual checks
+    std::map<CBlockIndex*, int> mapDone;
+    BOOST_FOREACH(const CSigCheckJob elem, vTodo) {
+        bool fOk = (*elem.first)();
+        delete elem.first;
+        if (!fOk) { // sig check failed; move away from it as fast as possible
+            // TODO: DoS?
+            LOCK(cs_main);
+            InvalidBlockFound(elem.second);
+            error("CSigCheckQueue::Process() : %s VerifySignature failed", elem.second->GetBlockHash().ToString().substr(0,10).c_str());
+        }
+        mapDone[elem.second]++;
+    }
+
+    // check which blocks are done processing
+    {
+        boost::unique_lock<boost::mutex> lock(cs_queue);
+
+        for (std::map<CBlockIndex*, int>::iterator it=mapDone.begin(); it != mapDone.end(); it++) {
+            CBlockIndex *pindex = it->first;
+            if ((mapSigsLeft[pindex] -= it->second) == 0 && setComplete.count(pindex)) {
+                Done(pindex);
+                setComplete.erase(pindex);
+            }
+        }
+
+        nRunning--;
+        if (!fRun && nRunning==0)
+            cond_full.notify_all();
+    }
+}
+
+CSigCheckQueue checkqueue;
+
+void ThreadSigCheck(void *parg) {
+    RenameThread("bitcoin-sigchk");
+
+    vnThreadsRunning[THREAD_SIGCHECK]++;
+    while (!fRequestShutdown)
+        checkqueue.Process();
+    vnThreadsRunning[THREAD_SIGCHECK]--;
+}
+
+bool CTransaction::CheckInputs(CCoinsViewCache &inputs, std::vector<CSigCheck*> *pvSigs, bool fSignatureChecks, bool fStrictPayToScriptHash, bool fStrictEncodings) const
 {
     if (!IsCoinBase())
     {
@@ -1302,27 +1414,18 @@ bool CTransaction::CheckInputs(CCoinsViewCache &inputs, enum CheckSig_mode csmod
         // The first loop above does all the inexpensive checks.
         // Only if ALL inputs pass do we perform expensive ECDSA signature checks.
         // Helps prevent CPU exhaustion attacks.
-
-        // Skip ECDSA signature verification when connecting blocks
-        // before the last blockchain checkpoint. This is safe because block merkle hashes are
-        // still computed and checked, and any change will be caught at the next checkpoint.
-        if (csmode == CS_ALWAYS || 
-            (csmode == CS_AFTER_CHECKPOINT && inputs.GetBestBlock()->nHeight >= Checkpoints::GetTotalBlocksEstimate())) {
+        if (fSignatureChecks) 
             for (unsigned int i = 0; i < vin.size(); i++) {
                 const COutPoint &prevout = vin[i].prevout;
                 const CCoins &coins = inputs.GetCoins(prevout.hash);
 
-                // Verify signature
-                if (!VerifySignature(coins, *this, i, fStrictPayToScriptHash, fStrictEncodings, 0)) {
-                    // only during transition phase for P2SH: do not invoke anti-DoS code for
-                    // potentially old clients relaying bad P2SH transactions
-                    if (fStrictPayToScriptHash && VerifySignature(coins, *this, i, false, fStrictEncodings, 0))
-                        return error("CheckInputs() : %s P2SH VerifySignature failed", GetHash().ToString().substr(0,10).c_str());
-
-                    return DoS(100,error("CheckInputs() : %s VerifySignature failed", GetHash().ToString().substr(0,10).c_str()));
+                if (pvSigs != NULL) {
+                    pvSigs->push_back(new CSigCheck(coins, *this, i, fStrictPayToScriptHash, fStrictEncodings, 0));
+                } else {
+                    if (!CSigCheck(coins, *this, i, fStrictPayToScriptHash, fStrictEncodings, 0)())
+                        return DoS(100,error("CheckInputs() : %s VerifySignature failed", GetHash().ToString().substr(0,10).c_str()));
                 }
             }
-        }
     }
 
     return true;
@@ -1350,7 +1453,7 @@ bool CTransaction::ClientCheckInputs() const
                 return false;
 
             // Verify signature
-            if (!VerifySignature(CCoins(txPrev, -1), *this, i, true, false, 0))
+            if (!CSigCheck(CCoins(txPrev, -1), *this, i, true, false, 0)())
                 return error("ConnectInputs() : VerifySignature failed");
 
             ///// this is redundant with the mempool.mapNextTx stuff,
@@ -1470,6 +1573,8 @@ bool CBlock::ConnectBlock(CBlockIndex* pindex, CCoinsViewCache &view, bool fJust
     if (!CheckBlock(!fJustCheck, !fJustCheck))
         return false;
 
+    bool fSignatureChecks = pindex->nHeight >= Checkpoints::GetTotalBlocksEstimate();
+
     // verify that the view's current state corresponds to the previous block
     assert(pindex->pprev == view.GetBestBlock());
 
@@ -1500,6 +1605,7 @@ bool CBlock::ConnectBlock(CBlockIndex* pindex, CCoinsViewCache &view, bool fJust
     bool fStrictPayToScriptHash = (pindex->nTime >= nBIP16SwitchTime);
 
     CBlockUndo blockundo;
+    std::vector<CSigCheck*> vSigs;
 
     int64 nFees = 0;
     unsigned int nSigOps = 0;
@@ -1528,7 +1634,7 @@ bool CBlock::ConnectBlock(CBlockIndex* pindex, CCoinsViewCache &view, bool fJust
 
             nFees += tx.GetValueIn(view)-tx.GetValueOut();
 
-            if (!tx.CheckInputs(view, CS_AFTER_CHECKPOINT, fStrictPayToScriptHash, false))
+            if (!tx.CheckInputs(view, (fJustCheck || nSigThreads==0) ? NULL : &vSigs, fSignatureChecks, fStrictPayToScriptHash, false))
                 return false;
         }
 
@@ -1541,6 +1647,9 @@ bool CBlock::ConnectBlock(CBlockIndex* pindex, CCoinsViewCache &view, bool fJust
 
     if (fJustCheck)
         return true;
+
+    if (fSignatureChecks)
+        checkqueue.Add(pindex, vSigs);
 
     // Write undo information to disk
     if (pindex->GetUndoPos().IsNull() || (pindex->nStatus & BLOCK_VALID_MASK) < BLOCK_VALID_SCRIPTS)
@@ -1557,12 +1666,16 @@ bool CBlock::ConnectBlock(CBlockIndex* pindex, CCoinsViewCache &view, bool fJust
             pindex->nStatus |= BLOCK_HAVE_UNDO;
         }
 
-        pindex->nStatus = (pindex->nStatus & ~BLOCK_VALID_MASK) | BLOCK_VALID_SCRIPTS;
+        pindex->nStatus = (pindex->nStatus & ~BLOCK_VALID_MASK) | BLOCK_VALID_CHAIN;
 
         CDiskBlockIndex blockindex(pindex);
         if (!pblocktree->WriteBlockIndex(blockindex))
             return error("ConnectBlock() : WriteBlockIndex failed");
     }
+
+    // wait until pindex->nStatus was updated before notifying blocks for completion
+    if (fSignatureChecks)
+        checkqueue.Complete(pindex);
 
     // add this block to the view's blockchain
     if (!view.SetBestBlock(pindex))
@@ -3798,7 +3911,7 @@ CBlock* CreateNewBlock(CReserveKey& reservekey)
             if (nBlockSigOps + nTxSigOps >= MAX_BLOCK_SIGOPS)
                 continue;
 
-            if (!tx.CheckInputs(viewTemp, CS_ALWAYS, true, true))
+            if (!tx.CheckInputs(viewTemp, NULL, true, true))
                 continue;
 
             CTxUndo txundo;

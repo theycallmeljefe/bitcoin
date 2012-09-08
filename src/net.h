@@ -96,6 +96,7 @@ public:
 /** Thread types */
 enum threadId
 {
+    THREAD_SIGCHECK,
     THREAD_SOCKETHANDLER,
     THREAD_OPENCONNECTIONS,
     THREAD_MESSAGEHANDLER,

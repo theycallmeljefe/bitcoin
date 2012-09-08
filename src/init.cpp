@@ -76,6 +76,7 @@ void Shutdown(void* parg)
         nTransactionsUpdated++;
         bitdb.Flush(false);
         StopNode();
+        checkqueue.Stop();
         {
             LOCK(cs_main);
             pcoinsTip->Flush();
@@ -291,6 +292,7 @@ std::string HelpMessage()
         "  -rescan                " + _("Rescan the block chain for missing wallet transactions") + "\n" +
         "  -checkblocks=<n>       " + _("How many blocks to check at startup (default: 2500, 0 = all)") + "\n" +
         "  -checklevel=<n>        " + _("How thorough the block verification is (0-6, default: 1)") + "\n" +
+        "  -sigthreads=<n>        " + _("How many signature checking threads to use (0-64, default: 0)") + "\n" +
         "  -loadblock=<file>      " + _("Imports blocks from external blk000?.dat file") + "\n" +
 
         "\n" + _("Block creation options:") + "\n" +
@@ -401,6 +403,8 @@ bool AppInit2()
         fDebugNet = GetBoolArg("-debugnet");
 
     bitdb.SetDetach(GetBoolArg("-detachdb", false));
+
+    nSigThreads = std::min(std::max((int)GetArg("-sigthreads", 0), 0), 64);
 
 #if !defined(WIN32) && !defined(QT_GUI)
     fDaemon = GetBoolArg("-daemon");
@@ -598,6 +602,10 @@ bool AppInit2()
         AddOneShot(strDest);
 
     // ********************************************************* Step 6: load blockchain
+
+    for (int i=0; i<nSigThreads; i++)
+        if (!NewThread(ThreadSigCheck, NULL))
+            InitError(_("Error: could not start signature checking thread"));
 
     uiInterface.InitMessage(_("Loading block index..."));
     printf("Loading block index...\n");
