@@ -120,6 +120,7 @@ bool GetTransaction(const uint256 &hash, CTransaction &tx, uint256 &hashBlock, b
 bool SetBestChain(CBlockIndex* pindexNew);
 bool ConnectBestBlock();
 CBlockIndex * InsertBlockIndex(uint256 hash);
+bool VerifySignature(const CCoins& txFrom, const CTransaction& txTo, unsigned int nIn, bool fValidatePayToScriptHash, bool fStrictEncodings, int nHashType);
 
 
 
