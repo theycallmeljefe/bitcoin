@@ -120,8 +120,8 @@ int GetNumBlocksOfPeers();
 bool IsInitialBlockDownload();
 std::string GetWarnings(std::string strFor);
 bool GetTransaction(const uint256 &hash, CTransaction &tx, uint256 &hashBlock, bool fAllowSlow = false);
-bool SetBestChain(CBlockIndex* pindexNew);
-bool ConnectBestBlock();
+bool SetBestChain(CBlockIndex* pindexNew, CBlock *pblock = NULL);
+bool ConnectBestBlock(CBlockIndex *pindexKnown = NULL, CBlock *pblockKnown = NULL);
 CBlockIndex * InsertBlockIndex(uint256 hash);
 void ThreadSigCheck(void *parg);
 

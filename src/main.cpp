@@ -1108,7 +1108,7 @@ void static InvalidBlockFound(CBlockIndex *pindex) {
         ConnectBestBlock(); // reorganise away from the failed block
 }
 
-bool ConnectBestBlock() {
+bool ConnectBestBlock(CBlockIndex *pindexKnown, CBlock *pblockKnown) {
     do {
         CBlockIndex *pindexNewBest;
 
@@ -1145,7 +1145,7 @@ bool ConnectBestBlock() {
             if (pindexTest->pprev == NULL || pindexTest->pnext != NULL) {
                 reverse(vAttach.begin(), vAttach.end());
                 BOOST_FOREACH(CBlockIndex *pindexSwitch, vAttach)
-                    if (!SetBestChain(pindexSwitch))
+                    if (!SetBestChain(pindexSwitch, pindexSwitch == pindexKnown ? pblockKnown : NULL))
                         return false;
                 return true;
             }
@@ -1688,7 +1688,7 @@ bool CBlock::ConnectBlock(CBlockIndex* pindex, CCoinsViewCache &view, bool fJust
     return true;
 }
 
-bool SetBestChain(CBlockIndex* pindexNew)
+bool SetBestChain(CBlockIndex* pindexNew, CBlock *pblockNew)
 {
     CCoinsViewCache &view = *pcoinsTip;
 
@@ -1759,10 +1759,15 @@ bool SetBestChain(CBlockIndex* pindexNew)
     vector<CTransaction> vDelete;
     BOOST_FOREACH(CBlockIndex *pindex, vConnect) {
         CBlock block;
-        if (!block.ReadFromDisk(pindex))
-            return error("SetBestBlock() : ReadFromDisk for connect failed");
+        CBlock *pblock = &block;
+        if (pblockNew && pindexNew==pindex) {
+            pblock = pblockNew;
+        } else {
+            if (!block.ReadFromDisk(pindex))
+                return error("SetBestBlock() : ReadFromDisk for connect failed");
+        }
         CCoinsViewCache viewTemp(view, true);
-        if (!block.ConnectBlock(pindex, viewTemp)) {
+        if (!pblock->ConnectBlock(pindex, viewTemp)) {
             InvalidChainFound(pindexNew);
             InvalidBlockFound(pindex);
             return error("SetBestBlock() : ConnectBlock %s failed", pindex->GetBlockHash().ToString().substr(0,20).c_str());
@@ -1771,7 +1776,7 @@ bool SetBestChain(CBlockIndex* pindexNew)
             return error("SetBestBlock() : Cache flush failed after connect");
 
         // Queue memory transactions to delete
-        BOOST_FOREACH(const CTransaction& tx, block.vtx)
+        BOOST_FOREACH(const CTransaction& tx, pblock->vtx)
             vDelete.push_back(tx);
     }
 
@@ -1796,17 +1801,17 @@ bool SetBestChain(CBlockIndex* pindexNew)
         if (pindex->pprev)
             pindex->pprev->pnext = pindex;
 
-    // Resurrect memory transactions that were in the disconnected branch
-    BOOST_FOREACH(CTransaction& tx, vResurrect)
-        tx.AcceptToMemoryPool(false);
-
-    // Delete redundant memory transactions that are in the connected branch
-    BOOST_FOREACH(CTransaction& tx, vDelete)
-        mempool.remove(tx);
-
-    // Update best block in wallet (so we can detect restored wallets)
     if (!fIsInitialDownload)
     {
+        // Resurrect memory transactions that were in the disconnected branch
+        BOOST_FOREACH(CTransaction& tx, vResurrect)
+            tx.AcceptToMemoryPool(false);
+
+        // Delete redundant memory transactions that are in the connected branch
+        BOOST_FOREACH(CTransaction& tx, vDelete)
+            mempool.remove(tx);
+
+        // Update best block in wallet (so we can detect restored wallets)
         const CBlockLocator locator(pindexNew);
         ::SetBestChain(locator);
     }
@@ -1883,7 +1888,7 @@ bool CBlock::AddToBlockIndex(const CDiskBlockPos &pos, bool fAllowBatch)
     pblocktree->WriteBlockIndex(CDiskBlockIndex(pindexNew));
 
     // New best?
-    if (!ConnectBestBlock())
+    if (!ConnectBestBlock(pindexNew, this))
         return false;
 
     if (pindexNew == pindexBest)
