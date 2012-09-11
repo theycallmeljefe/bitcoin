@@ -360,17 +360,18 @@ Value submitblock(const Array& params, bool fHelp)
 
     vector<unsigned char> blockData(ParseHex(params[0].get_str()));
     CDataStream ssBlock(blockData, SER_NETWORK, PROTOCOL_VERSION);
-    CBlock pblock;
+    CBlock *pblock = new CBlock();
     try {
-        ssBlock >> pblock;
+        ssBlock >> (*pblock);
     }
     catch (std::exception &e) {
         throw JSONRPCError(-22, "Block decode failed");
     }
 
-    bool fAccepted = ProcessBlock(NULL, &pblock);
+    bool fAccepted = ProcessBlock(NULL, pblock);
     if (!fAccepted)
         return "rejected";
+    delete pblock;
 
     return Value::null;
 }

@@ -273,6 +273,82 @@ bool CCoinsViewMemPool::HaveCoins(uint256 txid) {
 CCoinsViewCache *pcoinsTip = NULL;
 CBlockTreeDB *pblocktree = NULL;
 
+class CBlockCache
+{
+private:
+    CCriticalSection cs;
+    std::map<CBlockIndex*,std::pair<CBlock*,int> > mapBlocks;
+
+public:
+    void Store(CBlockIndex *pindex, CBlock *pblock, int nRef = 1) {
+        LOCK(cs);
+        std::map<CBlockIndex*,std::pair<CBlock*,int> >::iterator it = mapBlocks.find(pindex);
+        if (it == mapBlocks.end()) {
+            mapBlocks[pindex] = std::make_pair(pblock, nRef);
+        } else {
+            it->second.second += nRef;
+        }
+    }
+
+    CBlock* Ref(CBlockIndex *pindex, int nRef = 1) {
+        LOCK(cs);
+        std::map<CBlockIndex*,std::pair<CBlock*,int> >::iterator it = mapBlocks.find(pindex);
+        if (it == mapBlocks.end()) {
+            CBlock *pblock = new CBlock();
+            if (!pblock->ReadFromDisk(pindex))
+                return NULL;
+            mapBlocks[pindex] = std::make_pair(pblock, nRef);
+            return pblock;
+        } else {
+            it->second.second += nRef;
+            return it->second.first;
+        }
+    }
+
+    void Unref(CBlockIndex *pindex, int nRef = 1) {
+        LOCK(cs);
+        std::map<CBlockIndex*,std::pair<CBlock*,int> >::iterator it = mapBlocks.find(pindex);
+        if (it == mapBlocks.end()) {
+            assert(false);
+        } else {
+            if ((it->second.second -= nRef) == 0) {
+                delete it->second.first;
+                mapBlocks.erase(it);
+            }
+        }
+    }
+};
+
+class CBlockCacheRef
+{
+private:
+    CBlockCache *cache;
+    CBlockIndex *pindex;
+    CBlock *pblock;
+
+public:
+    CBlockCacheRef(CBlockCache &cacheIn, CBlockIndex *pindexIn) : cache(&cacheIn), pindex(pindexIn) {
+        pblock = cache->Ref(pindex);
+    }
+
+    CBlockCacheRef(CBlockCache &cacheIn, CBlockIndex *pindexIn, CBlock *pblockIn) : cache(&cacheIn), pindex(pindexIn), pblock(pblockIn) {
+        cache->Store(pindex, pblock);
+    }
+
+    ~CBlockCacheRef() {
+        if (pblock) {
+            cache->Unref(pindex);
+        }
+    }
+
+    CBlock* operator()() {
+        return pblock;
+    }
+};
+
+static CBlockCache blockcache;
+
+
 //////////////////////////////////////////////////////////////////////////////
 //
 // mapOrphanTransactions
@@ -876,9 +952,9 @@ bool GetTransaction(const uint256 &hash, CTransaction &txOut, uint256 &hashBlock
     }
 
     if (pindexSlow) {
-        CBlock block;
-        if (block.ReadFromDisk(pindexSlow)) {
-            BOOST_FOREACH(const CTransaction &tx, block.vtx) {
+        CBlockCacheRef ref(blockcache, pindexSlow);
+        if (ref()) {
+            BOOST_FOREACH(const CTransaction &tx, ref()->vtx) {
                 if (tx.GetHash() == hash) {
                     txOut = tx;
                     hashBlock = pindexSlow->GetBlockHash();
@@ -1108,7 +1184,7 @@ void static InvalidBlockFound(CBlockIndex *pindex) {
         ConnectBestBlock(); // reorganise away from the failed block
 }
 
-bool ConnectBestBlock(CBlockIndex *pindexKnown, CBlock *pblockKnown) {
+bool ConnectBestBlock() {
     do {
         CBlockIndex *pindexNewBest;
 
@@ -1145,7 +1221,7 @@ bool ConnectBestBlock(CBlockIndex *pindexKnown, CBlock *pblockKnown) {
             if (pindexTest->pprev == NULL || pindexTest->pnext != NULL) {
                 reverse(vAttach.begin(), vAttach.end());
                 BOOST_FOREACH(CBlockIndex *pindexSwitch, vAttach)
-                    if (!SetBestChain(pindexSwitch, pindexSwitch == pindexKnown ? pblockKnown : NULL))
+                    if (!SetBestChain(pindexSwitch))
                         return false;
                 return true;
             }
@@ -1254,6 +1330,7 @@ void CSigCheckQueue::Done(CBlockIndex *pindex) {
         // pblocktree->WriteBlockIndex(CDiskBlockIndex(pindex));
     }
     mapSigsLeft.erase(pindex);
+    blockcache.Unref(pindex);
 }
 
 void CSigCheckQueue::Stop() {
@@ -1291,6 +1368,7 @@ void CSigCheckQueue::Add(CBlockIndex *pindex, const std::vector<CSigCheck*> &che
 void CSigCheckQueue::Complete(CBlockIndex *pindex) {
     boost::unique_lock<boost::mutex> lock(cs_queue);
 
+    blockcache.Ref(pindex);
     if (mapSigsLeft[pindex] == 0) {
         Done(pindex);
     } else {
@@ -1688,7 +1766,7 @@ bool CBlock::ConnectBlock(CBlockIndex* pindex, CCoinsViewCache &view, bool fJust
     return true;
 }
 
-bool SetBestChain(CBlockIndex* pindexNew, CBlock *pblockNew)
+bool SetBestChain(CBlockIndex *pindexNew)
 {
     CCoinsViewCache &view = *pcoinsTip;
 
@@ -1740,17 +1818,17 @@ bool SetBestChain(CBlockIndex* pindexNew, CBlock *pblockNew)
     // Disconnect shorter branch
     vector<CTransaction> vResurrect;
     BOOST_FOREACH(CBlockIndex* pindex, vDisconnect) {
-        CBlock block;
-        if (!block.ReadFromDisk(pindex))
+        CBlockCacheRef ref(blockcache, pindex);
+        if (ref()==NULL)
             return error("SetBestBlock() : ReadFromDisk for disconnect failed");
         CCoinsViewCache viewTemp(view, true);
-        if (!block.DisconnectBlock(pindex, viewTemp))
+        if (!ref()->DisconnectBlock(pindex, viewTemp))
             return error("SetBestBlock() : DisconnectBlock %s failed", pindex->GetBlockHash().ToString().substr(0,20).c_str());
         if (!viewTemp.Flush())
             return error("SetBestBlock() : Cache flush failed after disconnect");
 
         // Queue memory transactions to resurrect
-        BOOST_FOREACH(const CTransaction& tx, block.vtx)
+        BOOST_FOREACH(const CTransaction& tx, ref()->vtx)
             if (!tx.IsCoinBase())
                 vResurrect.push_back(tx);
     }
@@ -1758,16 +1836,11 @@ bool SetBestChain(CBlockIndex* pindexNew, CBlock *pblockNew)
     // Connect longer branch
     vector<CTransaction> vDelete;
     BOOST_FOREACH(CBlockIndex *pindex, vConnect) {
-        CBlock block;
-        CBlock *pblock = &block;
-        if (pblockNew && pindexNew==pindex) {
-            pblock = pblockNew;
-        } else {
-            if (!block.ReadFromDisk(pindex))
+        CBlockCacheRef ref(blockcache, pindex);
+        if (ref()==NULL)
                 return error("SetBestBlock() : ReadFromDisk for connect failed");
-        }
         CCoinsViewCache viewTemp(view, true);
-        if (!pblock->ConnectBlock(pindex, viewTemp)) {
+        if (!ref()->ConnectBlock(pindex, viewTemp)) {
             InvalidChainFound(pindexNew);
             InvalidBlockFound(pindex);
             return error("SetBestBlock() : ConnectBlock %s failed", pindex->GetBlockHash().ToString().substr(0,20).c_str());
@@ -1776,7 +1849,7 @@ bool SetBestChain(CBlockIndex* pindexNew, CBlock *pblockNew)
             return error("SetBestBlock() : Cache flush failed after connect");
 
         // Queue memory transactions to delete
-        BOOST_FOREACH(const CTransaction& tx, pblock->vtx)
+        BOOST_FOREACH(const CTransaction& tx, ref()->vtx)
             vDelete.push_back(tx);
     }
 
@@ -1858,37 +1931,40 @@ bool SetBestChain(CBlockIndex* pindexNew, CBlock *pblockNew)
 }
 
 
-bool CBlock::AddToBlockIndex(const CDiskBlockPos &pos, bool fAllowBatch)
+bool AddToBlockIndex(CBlock* &pblock, const CDiskBlockPos &pos)
 {
     // Check for duplicate
-    uint256 hash = GetHash();
+    uint256 hash = pblock->GetHash();
     if (mapBlockIndex.count(hash))
         return error("AddToBlockIndex() : %s already exists", hash.ToString().substr(0,20).c_str());
 
     // Construct new block index object
-    CBlockIndex* pindexNew = new CBlockIndex(*this);
+    CBlockIndex* pindexNew = new CBlockIndex(*pblock);
     if (!pindexNew)
         return error("AddToBlockIndex() : new CBlockIndex failed");
     map<uint256, CBlockIndex*>::iterator mi = mapBlockIndex.insert(make_pair(hash, pindexNew)).first;
     pindexNew->phashBlock = &((*mi).first);
-    map<uint256, CBlockIndex*>::iterator miPrev = mapBlockIndex.find(hashPrevBlock);
+    map<uint256, CBlockIndex*>::iterator miPrev = mapBlockIndex.find(pblock->hashPrevBlock);
     if (miPrev != mapBlockIndex.end())
     {
         pindexNew->pprev = (*miPrev).second;
         pindexNew->nHeight = pindexNew->pprev->nHeight + 1;
     }
     pindexNew->bnChainWork = (pindexNew->pprev ? pindexNew->pprev->bnChainWork : 0) + pindexNew->GetBlockWork();
-    pindexNew->nChainTx = (pindexNew->pprev ? pindexNew->pprev->nChainTx : 0) + vtx.size();
+    pindexNew->nChainTx = (pindexNew->pprev ? pindexNew->pprev->nChainTx : 0) + pblock->vtx.size();
     pindexNew->nFile = pos.nFile;
     pindexNew->nDataPos = pos.nPos;
     pindexNew->nUndoPos = 0;
     pindexNew->nStatus = BLOCK_VALID_TRANSACTIONS | BLOCK_HAVE_DATA;
     setBlockIndexValid.insert(pindexNew);
 
+    CBlockCacheRef ref(blockcache, pindexNew, pblock);
+    pblock = NULL;
+
     pblocktree->WriteBlockIndex(CDiskBlockIndex(pindexNew));
 
     // New best?
-    if (!ConnectBestBlock(pindexNew, this))
+    if (!ConnectBestBlock())
         return false;
 
     if (pindexNew == pindexBest)
@@ -1896,7 +1972,7 @@ bool CBlock::AddToBlockIndex(const CDiskBlockPos &pos, bool fAllowBatch)
         // Notify UI to display prev block's coinbase if it was ours
         static uint256 hashPrevBestCoinBase;
         UpdatedTransaction(hashPrevBestCoinBase);
-        hashPrevBestCoinBase = GetTxHash(0);
+        hashPrevBestCoinBase = ref()->GetTxHash(0);
     }
 
     pblocktree->Flush();
@@ -2036,39 +2112,39 @@ bool CBlock::CheckBlock(bool fCheckPOW, bool fCheckMerkleRoot) const
     return true;
 }
 
-bool CBlock::AcceptBlock(bool fAllowBatch)
+bool AcceptBlock(CBlock* &pblock)
 {
     // Check for duplicate
-    uint256 hash = GetHash();
+    uint256 hash = pblock->GetHash();
     if (mapBlockIndex.count(hash))
         return error("AcceptBlock() : block already in mapBlockIndex");
 
     // Get prev block index
-    map<uint256, CBlockIndex*>::iterator mi = mapBlockIndex.find(hashPrevBlock);
+    map<uint256, CBlockIndex*>::iterator mi = mapBlockIndex.find(pblock->hashPrevBlock);
     if (mi == mapBlockIndex.end())
-        return DoS(10, error("AcceptBlock() : prev block not found"));
+        return pblock->DoS(10, error("AcceptBlock() : prev block not found"));
     CBlockIndex* pindexPrev = (*mi).second;
     int nHeight = pindexPrev->nHeight+1;
 
     // Check proof of work
-    if (nBits != GetNextWorkRequired(pindexPrev, this))
-        return DoS(100, error("AcceptBlock() : incorrect proof of work"));
+    if (pblock->nBits != GetNextWorkRequired(pindexPrev, pblock))
+        return pblock->DoS(100, error("AcceptBlock() : incorrect proof of work"));
 
     // Check timestamp against prev
-    if (GetBlockTime() <= pindexPrev->GetMedianTimePast())
+    if (pblock->GetBlockTime() <= pindexPrev->GetMedianTimePast())
         return error("AcceptBlock() : block's timestamp is too early");
 
     // Check that all transactions are finalized
-    BOOST_FOREACH(const CTransaction& tx, vtx)
-        if (!tx.IsFinal(nHeight, GetBlockTime()))
-            return DoS(10, error("AcceptBlock() : contains a non-final transaction"));
+    BOOST_FOREACH(const CTransaction& tx, pblock->vtx)
+        if (!tx.IsFinal(nHeight, pblock->GetBlockTime()))
+            return pblock->DoS(10, error("AcceptBlock() : contains a non-final transaction"));
 
     // Check that the block chain matches the known block chain up to a checkpoint
     if (!Checkpoints::CheckBlock(nHeight, hash))
-        return DoS(100, error("AcceptBlock() : rejected by checkpoint lock-in at %d", nHeight));
+        return pblock->DoS(100, error("AcceptBlock() : rejected by checkpoint lock-in at %d", nHeight));
 
     // Reject block.nVersion=1 blocks when 95% (75% on testnet) of the network has upgraded:
-    if (nVersion < 2)
+    if (pblock->nVersion < 2)
     {
         if ((!fTestNet && CBlockIndex::IsSuperMajority(2, pindexPrev, 950, 1000)) ||
             (fTestNet && CBlockIndex::IsSuperMajority(2, pindexPrev, 75, 100)))
@@ -2077,28 +2153,28 @@ bool CBlock::AcceptBlock(bool fAllowBatch)
         }
     }
     // Enforce block.nVersion=2 rule that the coinbase starts with serialized block height
-    if (nVersion >= 2)
+    if (pblock->nVersion >= 2)
     {
         // if 750 of the last 1,000 blocks are version 2 or greater (51/100 if testnet):
         if ((!fTestNet && CBlockIndex::IsSuperMajority(2, pindexPrev, 750, 1000)) ||
             (fTestNet && CBlockIndex::IsSuperMajority(2, pindexPrev, 51, 100)))
         {
             CScript expect = CScript() << nHeight;
-            if (!std::equal(expect.begin(), expect.end(), vtx[0].vin[0].scriptSig.begin()))
-                return DoS(100, error("AcceptBlock() : block height mismatch in coinbase"));
+            if (!std::equal(expect.begin(), expect.end(), pblock->vtx[0].vin[0].scriptSig.begin()))
+                return pblock->DoS(100, error("AcceptBlock() : block height mismatch in coinbase"));
         }
     }
 
     // Write block to history file
-    unsigned int nBlockSize = ::GetSerializeSize(*this, SER_DISK, CLIENT_VERSION);
-    if (!CheckDiskSpace(::GetSerializeSize(*this, SER_DISK, CLIENT_VERSION)))
+    unsigned int nBlockSize = ::GetSerializeSize(*pblock, SER_DISK, CLIENT_VERSION);
+    if (!CheckDiskSpace(::GetSerializeSize(*pblock, SER_DISK, CLIENT_VERSION)))
         return error("AcceptBlock() : out of disk space");
     CDiskBlockPos blockPos;
-    if (!FindBlockPos(blockPos, nBlockSize+8, nHeight, nTime))
+    if (!FindBlockPos(blockPos, nBlockSize+8, nHeight, pblock->nTime))
         return error("AcceptBlock() : FindBlockPos failed");
-    if (!WriteToDisk(blockPos))
+    if (!pblock->WriteToDisk(blockPos))
         return error("AcceptBlock() : WriteToDisk failed");
-    if (!AddToBlockIndex(blockPos, fAllowBatch))
+    if (!AddToBlockIndex(pblock, blockPos))
         return error("AcceptBlock() : AddToBlockIndex failed");
 
     // Relay inventory, but don't relay old inventory during initial block download
@@ -2126,7 +2202,7 @@ bool CBlockIndex::IsSuperMajority(int minVersion, const CBlockIndex* pstart, uns
     return (nFound >= nRequired);
 }
 
-bool ProcessBlock(CNode* pfrom, CBlock* pblock, bool fAllowBatch)
+bool ProcessBlock(CNode* pfrom, CBlock* &pblock)
 {
     // Check for duplicate
     uint256 hash = pblock->GetHash();
@@ -2181,7 +2257,7 @@ bool ProcessBlock(CNode* pfrom, CBlock* pblock, bool fAllowBatch)
     }
 
     // Store to disk
-    if (!pblock->AcceptBlock(fAllowBatch))
+    if (!AcceptBlock(pblock))
         return error("ProcessBlock() : AcceptBlock FAILED");
 
     // Recursively process any orphan blocks that depended on this one
@@ -2195,7 +2271,7 @@ bool ProcessBlock(CNode* pfrom, CBlock* pblock, bool fAllowBatch)
              ++mi)
         {
             CBlock* pblockOrphan = (*mi).second;
-            if (pblockOrphan->AcceptBlock(fAllowBatch))
+            if (AcceptBlock(pblockOrphan))
                 vWorkQueue.push_back(pblockOrphan->GetHash());
             mapOrphanBlocks.erase(pblockOrphan->GetHash());
             delete pblockOrphan;
@@ -2416,39 +2492,40 @@ bool LoadBlockIndex(bool fAllowNew)
         txNew.vin[0].scriptSig = CScript() << 486604799 << CBigNum(4) << vector<unsigned char>((const unsigned char*)pszTimestamp, (const unsigned char*)pszTimestamp + strlen(pszTimestamp));
         txNew.vout[0].nValue = 50 * COIN;
         txNew.vout[0].scriptPubKey = CScript() << ParseHex("04678afdb0fe5548271967f1a67130b7105cd6a828e03909a67962e0ea1f61deb649f6bc3f4cef38c4f35504e51ec112de5c384df7ba0b8d578a4c702b6bf11d5f") << OP_CHECKSIG;
-        CBlock block;
-        block.vtx.push_back(txNew);
-        block.hashPrevBlock = 0;
-        block.hashMerkleRoot = block.BuildMerkleTree();
-        block.nVersion = 1;
-        block.nTime    = 1231006505;
-        block.nBits    = 0x1d00ffff;
-        block.nNonce   = 2083236893;
+        CBlock *pblock = new CBlock();
+        pblock->vtx.push_back(txNew);
+        pblock->hashPrevBlock = 0;
+        pblock->hashMerkleRoot = pblock->BuildMerkleTree();
+        pblock->nVersion = 1;
+        pblock->nTime    = 1231006505;
+        pblock->nBits    = 0x1d00ffff;
+        pblock->nNonce   = 2083236893;
 
         if (fTestNet)
         {
-            block.nTime    = 1296688602;
-            block.nNonce   = 414098458;
+            pblock->nTime    = 1296688602;
+            pblock->nNonce   = 414098458;
         }
 
         //// debug print
-        uint256 hash = block.GetHash();
+        uint256 hash = pblock->GetHash();
         printf("%s\n", hash.ToString().c_str());
         printf("%s\n", hashGenesisBlock.ToString().c_str());
-        printf("%s\n", block.hashMerkleRoot.ToString().c_str());
-        assert(block.hashMerkleRoot == uint256("0x4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b"));
-        block.print();
+        printf("%s\n", pblock->hashMerkleRoot.ToString().c_str());
+        assert(pblock->hashMerkleRoot == uint256("0x4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b"));
+        pblock->print();
         assert(hash == hashGenesisBlock);
 
         // Start new block file
-        unsigned int nBlockSize = ::GetSerializeSize(block, SER_DISK, CLIENT_VERSION);
+        unsigned int nBlockSize = ::GetSerializeSize(*pblock, SER_DISK, CLIENT_VERSION);
         CDiskBlockPos blockPos;
-        if (!FindBlockPos(blockPos, nBlockSize+8, 0, block.nTime))
+        if (!FindBlockPos(blockPos, nBlockSize+8, 0, pblock->nTime))
             return error("AcceptBlock() : FindBlockPos failed");
-        if (!block.WriteToDisk(blockPos))
+        if (!pblock->WriteToDisk(blockPos))
             return error("LoadBlockIndex() : writing genesis block to disk failed");
-        if (!block.AddToBlockIndex(blockPos, false))
+        if (!AddToBlockIndex(pblock, blockPos))
             return error("LoadBlockIndex() : genesis block not accepted");
+        delete pblock;
     }
 
     return true;
@@ -2532,7 +2609,6 @@ bool LoadExternalBlockFile(FILE* fileIn)
 
     int nLoaded = 0;
     {
-        LOCK(cs_main);
         try {
             CAutoFile blkdat(fileIn, SER_DISK, CLIENT_VERSION);
             unsigned int nPos = 0;
@@ -2567,13 +2643,15 @@ bool LoadExternalBlockFile(FILE* fileIn)
                 blkdat >> nSize;
                 if (nSize > 0 && nSize <= MAX_BLOCK_SIZE)
                 {
-                    CBlock block;
-                    blkdat >> block;
-                    if (ProcessBlock(NULL,&block))
+                    CBlock *pblock = new CBlock();
+                    blkdat >> (*pblock);
+                    LOCK(cs_main);
+                    if (ProcessBlock(NULL,pblock))
                     {
                         nLoaded++;
                         nPos += 4 + nSize;
                     }
+                    delete pblock;
                 }
             }
         }
@@ -2971,9 +3049,11 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv)
                 map<uint256, CBlockIndex*>::iterator mi = mapBlockIndex.find(inv.hash);
                 if (mi != mapBlockIndex.end())
                 {
-                    CBlock block;
-                    block.ReadFromDisk((*mi).second);
-                    pfrom->PushMessage("block", block);
+                    {
+                        CBlockCacheRef ref(blockcache, (*mi).second);
+                        if (ref())
+                            pfrom->PushMessage("block", *(ref()));
+                    }
 
                     // Trigger them to send a getblocks request for the next batch of inventory
                     if (inv.hash == pfrom->hashContinue)
@@ -3158,18 +3238,19 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv)
 
     else if (strCommand == "block")
     {
-        CBlock block;
-        vRecv >> block;
+        CBlock *pblock = new CBlock();
+        vRecv >> (*pblock);
 
-        printf("received block %s\n", block.GetHash().ToString().substr(0,20).c_str());
+        printf("received block %s\n", pblock->GetHash().ToString().substr(0,20).c_str());
         // block.print();
 
-        CInv inv(MSG_BLOCK, block.GetHash());
+        CInv inv(MSG_BLOCK, pblock->GetHash());
         pfrom->AddInventoryKnown(inv);
 
-        if (ProcessBlock(pfrom, &block))
+        if (ProcessBlock(pfrom, pblock))
             mapAlreadyAskedFor.erase(inv);
-        if (block.nDoS) pfrom->Misbehaving(block.nDoS);
+        if (pblock && pblock->nDoS) pfrom->Misbehaving(pblock->nDoS);
+        delete pblock;
     }
 
 

@@ -99,7 +99,7 @@ class CCoinsViewCache;
 void RegisterWallet(CWallet* pwalletIn);
 void UnregisterWallet(CWallet* pwalletIn);
 void SyncWithWallets(const uint256 &hash, const CTransaction& tx, const CBlock* pblock = NULL, bool fUpdate = false);
-bool ProcessBlock(CNode* pfrom, CBlock* pblock, bool fAllowBatch = true);
+bool ProcessBlock(CNode* pfrom, CBlock* &pblock);
 bool CheckDiskSpace(uint64 nAdditionalBytes=0);
 FILE* OpenBlockFile(const CDiskBlockPos &pos, bool fReadOnly = false);
 FILE* OpenUndoFile(const CDiskBlockPos &pos, bool fReadOnly = false);
@@ -120,10 +120,12 @@ int GetNumBlocksOfPeers();
 bool IsInitialBlockDownload();
 std::string GetWarnings(std::string strFor);
 bool GetTransaction(const uint256 &hash, CTransaction &tx, uint256 &hashBlock, bool fAllowSlow = false);
-bool SetBestChain(CBlockIndex* pindexNew, CBlock *pblock = NULL);
-bool ConnectBestBlock(CBlockIndex *pindexKnown = NULL, CBlock *pblockKnown = NULL);
+bool SetBestChain(CBlockIndex *pindex);
+bool ConnectBestBlock();
 CBlockIndex * InsertBlockIndex(uint256 hash);
 void ThreadSigCheck(void *parg);
+bool AddToBlockIndex(CBlock* &pblock, const CDiskBlockPos &pos);
+bool AcceptBlock(CBlock* &pblock);
 
 
 
@@ -977,7 +979,7 @@ class CSigCheck
 {
 public:
     CScript scriptPubKey;
-    CTransaction txTo;
+    const CTransaction &txTo;
     unsigned int nIn;
     bool fValidatePayToScriptHash;
     bool fStrictEncodings;
@@ -1322,9 +1324,7 @@ public:
     bool DisconnectBlock(CBlockIndex *pindex, CCoinsViewCache &coins);
     bool ConnectBlock(CBlockIndex *pindex, CCoinsViewCache &coins, bool fJustCheck=false);
     bool ReadFromDisk(const CBlockIndex* pindex, bool fReadTransactions=true);
-    bool AddToBlockIndex(const CDiskBlockPos &pos, bool fAllowBatch = true);
     bool CheckBlock(bool fCheckPOW=true, bool fCheckMerkleRoot=true) const;
-    bool AcceptBlock(bool fAllowBatch = true);
 };
 
 
