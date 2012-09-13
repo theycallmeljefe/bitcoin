@@ -25,6 +25,7 @@
 #include "notificator.h"
 #include "guiutil.h"
 #include "rpcconsole.h"
+#include "main.h"
 
 #ifdef Q_WS_MAC
 #include "macdockiconhandler.h"
@@ -502,7 +503,7 @@ void BitcoinGUI::setNumConnections(int count)
 void BitcoinGUI::setNumBlocks(int count, int nTotalBlocks)
 {
     // don't show / hide progressBar and its label if we have no connection(s) to the network
-    if (!clientModel || clientModel->getNumConnections() == 0)
+    if (!clientModel || clientModel->getNumConnections() == 0 && !fImporting)
     {
         progressBarLabel->setVisible(false);
         progressBar->setVisible(false);
@@ -520,7 +521,7 @@ void BitcoinGUI::setNumBlocks(int count, int nTotalBlocks)
 
         if (strStatusBarWarnings.isEmpty())
         {
-            progressBarLabel->setText(tr("Synchronizing with network..."));
+            progressBarLabel->setText(tr(!fImporting ? "Synchronizing with network..." : "Importing blocks..."));
             progressBarLabel->setVisible(true);
             progressBar->setFormat(tr("~%n block(s) remaining", "", nRemainingBlocks));
             progressBar->setMaximum(nTotalBlocks);

@@ -40,6 +40,7 @@ CBigNum bnBestInvalidWork = 0;
 uint256 hashBestChain = 0;
 CBlockIndex* pindexBest = NULL;
 int64 nTimeBestReceived = 0;
+bool fImporting = false;
 
 CMedianFilter<int> cPeerBlockCounts(5, 0); // Amount of blocks that other nodes claim to have
 
@@ -2664,6 +2665,25 @@ bool LoadExternalBlockFile(FILE* fileIn)
     return nLoaded > 0;
 }
 
+void ThreadImport(void *data) {
+    std::vector<boost::filesystem::path> *vFiles = reinterpret_cast<std::vector<boost::filesystem::path>*>(data);
+
+    RenameThread("bitcoin-loadblk");
+
+    vnThreadsRunning[THREAD_IMPORT]++;
+
+    BOOST_FOREACH(boost::filesystem::path &path, *vFiles) {
+        FILE *file = fopen(path.string().c_str(), "rb");
+        fImporting = true;
+        if (file)
+            LoadExternalBlockFile(file);
+        fImporting = false;
+    }
+
+    vnThreadsRunning[THREAD_IMPORT]--;
+}
+
+
 
 
 
@@ -2869,7 +2889,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv)
 
         // Ask the first connected node for block updates
         static int nAskedForBlocks = 0;
-        if (!pfrom->fClient && !pfrom->fOneShot &&
+        if (!pfrom->fClient && !pfrom->fOneShot && !fImporting &&
             (pfrom->nVersion < NOBLKS_VERSION_START ||
              pfrom->nVersion >= NOBLKS_VERSION_END) &&
              (nAskedForBlocks < 1 || vNodes.size() <= 1))
@@ -3004,9 +3024,10 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv)
             if (fDebug)
                 printf("  got inventory: %s  %s\n", inv.ToString().c_str(), fAlreadyHave ? "have" : "new");
 
-            if (!fAlreadyHave)
-                pfrom->AskFor(inv);
-            else if (inv.type == MSG_BLOCK && mapOrphanBlocks.count(inv.hash)) {
+            if (!fAlreadyHave) {
+                if (!fImporting)
+                    pfrom->AskFor(inv);
+            } else if (inv.type == MSG_BLOCK && mapOrphanBlocks.count(inv.hash)) {
                 pfrom->PushGetBlocks(pindexBest, GetOrphanRoot(mapOrphanBlocks[inv.hash]));
             } else if (nInv == nLastBlock) {
                 // In case we are on a very long side-chain, it is possible that we already have

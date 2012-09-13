@@ -736,19 +736,17 @@ bool AppInit2()
     // ********************************************************* Step 8: import blocks
 
     // scan for better chains in the block chain database, that are not yet connected in the active best chain
-    uiInterface.InitMessage(_("Importing blocks from block database..."));
+    uiInterface.InitMessage(_("Connecting best block..."));
     if (!ConnectBestBlock())
         strErrors << "Failed to connect best block";
 
     if (mapArgs.count("-loadblock"))
     {
-        uiInterface.InitMessage(_("Importing blocks..."));
+        uiInterface.InitMessage(_("Starting block import..."));
+        std::vector<boost::filesystem::path> *vPath = new std::vector<boost::filesystem::path>();
         BOOST_FOREACH(string strFile, mapMultiArgs["-loadblock"])
-        {
-            FILE *file = fopen(strFile.c_str(), "rb");
-            if (file)
-                LoadExternalBlockFile(file);
-        }
+            vPath->push_back(strFile);
+        NewThread(ThreadImport, vPath);
     }
 
     // ********************************************************* Step 9: load peers
