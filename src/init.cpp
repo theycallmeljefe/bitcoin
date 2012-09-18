@@ -8,6 +8,7 @@
 #include "net.h"
 #include "init.h"
 #include "util.h"
+#include "checkpoints.h"
 #include "ui_interface.h"
 #include <boost/filesystem.hpp>
 #include <boost/filesystem/fstream.hpp>
@@ -293,6 +294,7 @@ std::string HelpMessage()
         "  -checkblocks=<n>       " + _("How many blocks to check at startup (default: 2500, 0 = all)") + "\n" +
         "  -checklevel=<n>        " + _("How thorough the block verification is (0-6, default: 1)") + "\n" +
         "  -sigthreads=<n>        " + _("How many signature checking threads to use (0-64, default: 0)") + "\n" +
+        "  -sigheight=<n>         " + _("At which height signature checking should start (default: last checkpoint)") + "\n" +
         "  -loadblock=<file>      " + _("Imports blocks from external blk000?.dat file") + "\n" +
 
         "\n" + _("Block creation options:") + "\n" +
@@ -405,6 +407,8 @@ bool AppInit2()
     bitdb.SetDetach(GetBoolArg("-detachdb", false));
 
     nSigThreads = std::min(std::max((int)GetArg("-sigthreads", 0), 0), 64);
+
+    nSigHeight = std::min((int)GetArg("-sigheight", Checkpoints::GetTotalBlocksEstimate()), 0);
 
 #if !defined(WIN32) && !defined(QT_GUI)
     fDaemon = GetBoolArg("-daemon");

@@ -78,6 +78,7 @@ extern CCriticalSection cs_setpwalletRegistered;
 extern std::set<CWallet*> setpwalletRegistered;
 extern unsigned char pchMessageStart[4];
 extern int nSigThreads;
+extern int nSigHeight;
 extern bool fImporting;
 
 // Settings

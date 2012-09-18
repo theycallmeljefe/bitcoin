@@ -41,6 +41,7 @@ uint256 hashBestChain = 0;
 CBlockIndex* pindexBest = NULL;
 int64 nTimeBestReceived = 0;
 bool fImporting = false;
+int nSigHeight = 0;
 
 CMedianFilter<int> cPeerBlockCounts(5, 0); // Amount of blocks that other nodes claim to have
 
@@ -1652,7 +1653,7 @@ bool CBlock::ConnectBlock(CBlockIndex* pindex, CCoinsViewCache &view, bool fJust
     if (!CheckBlock(!fJustCheck, !fJustCheck))
         return false;
 
-    bool fSignatureChecks = pindex->nHeight >= Checkpoints::GetTotalBlocksEstimate();
+    bool fSignatureChecks = pindex->nHeight >= nSigHeight;
 
     // verify that the view's current state corresponds to the previous block
     assert(pindex->pprev == view.GetBestBlock());
