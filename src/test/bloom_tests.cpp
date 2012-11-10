@@ -192,7 +192,7 @@ BOOST_AUTO_TEST_CASE(merkle_block_1)
     BOOST_CHECK(merkleBlock.txn.ExtractMatches(vMatched) == block.hashMerkleRoot);
     BOOST_CHECK(vMatched.size() == merkleBlock.vMatchedTxn.size());
     for (unsigned int i = 0; i < vMatched.size(); i++)
-        BOOST_CHECK(vMatched[i] == merkleBlock.vMatchedTxn[i].first);
+        BOOST_CHECK(vMatched[i] == merkleBlock.vMatchedTxn[i].second);
 
     // Also match the 8th transaction
     filter.insert(uint256("0xdd1fd2a6fc16404faf339881a90adbde7f4f728691ac62e8f168809cdfae1053"));
@@ -210,7 +210,7 @@ BOOST_AUTO_TEST_CASE(merkle_block_1)
     BOOST_CHECK(merkleBlock.txn.ExtractMatches(vMatched) == block.hashMerkleRoot);
     BOOST_CHECK(vMatched.size() == merkleBlock.vMatchedTxn.size());
     for (unsigned int i = 0; i < vMatched.size(); i++)
-        BOOST_CHECK(vMatched[i] == merkleBlock.vMatchedTxn[i].first);
+        BOOST_CHECK(vMatched[i] == merkleBlock.vMatchedTxn[i].second);
 }
 
 BOOST_AUTO_TEST_CASE(merkle_block_2)
@@ -239,7 +239,7 @@ BOOST_AUTO_TEST_CASE(merkle_block_2)
     BOOST_CHECK(merkleBlock.txn.ExtractMatches(vMatched) == block.hashMerkleRoot);
     BOOST_CHECK(vMatched.size() == merkleBlock.vMatchedTxn.size());
     for (unsigned int i = 0; i < vMatched.size(); i++)
-        BOOST_CHECK(vMatched[i] == merkleBlock.vMatchedTxn[i].first);
+        BOOST_CHECK(vMatched[i] == merkleBlock.vMatchedTxn[i].second);
 
     // Match an output from the second transaction (the pubkey for address 1DZTzaBHUDM7T3QvUKBz4qXMRpkg8jsfB5)
     // This should match the third transaction because it spends the output matched
@@ -266,7 +266,7 @@ BOOST_AUTO_TEST_CASE(merkle_block_2)
     BOOST_CHECK(merkleBlock.txn.ExtractMatches(vMatched) == block.hashMerkleRoot);
     BOOST_CHECK(vMatched.size() == merkleBlock.vMatchedTxn.size());
     for (unsigned int i = 0; i < vMatched.size(); i++)
-        BOOST_CHECK(vMatched[i] == merkleBlock.vMatchedTxn[i].first);
+        BOOST_CHECK(vMatched[i] == merkleBlock.vMatchedTxn[i].second);
 }
 
 BOOST_AUTO_TEST_CASE(merkle_block_3_and_serialize)
@@ -294,7 +294,7 @@ BOOST_AUTO_TEST_CASE(merkle_block_3_and_serialize)
     BOOST_CHECK(merkleBlock.txn.ExtractMatches(vMatched) == block.hashMerkleRoot);
     BOOST_CHECK(vMatched.size() == merkleBlock.vMatchedTxn.size());
     for (unsigned int i = 0; i < vMatched.size(); i++)
-        BOOST_CHECK(vMatched[i] == merkleBlock.vMatchedTxn[i].first);
+        BOOST_CHECK(vMatched[i] == merkleBlock.vMatchedTxn[i].second);
 
     /* TODO CDataStream merkleStream(SER_NETWORK, PROTOCOL_VERSION);
     merkleStream << merkleBlock;
@@ -334,7 +334,7 @@ BOOST_AUTO_TEST_CASE(merkle_block_4)
     BOOST_CHECK(merkleBlock.txn.ExtractMatches(vMatched) == block.hashMerkleRoot);
     BOOST_CHECK(vMatched.size() == merkleBlock.vMatchedTxn.size());
     for (unsigned int i = 0; i < vMatched.size(); i++)
-        BOOST_CHECK(vMatched[i] == merkleBlock.vMatchedTxn[i].first);
+        BOOST_CHECK(vMatched[i] == merkleBlock.vMatchedTxn[i].second);
 
     // Also match the 4th transaction
     filter.insert(uint256("0x02981fa052f0481dbc5868f4fc2166035a10f27a03cfd2de67326471df5bc041"));
@@ -352,7 +352,7 @@ BOOST_AUTO_TEST_CASE(merkle_block_4)
     BOOST_CHECK(merkleBlock.txn.ExtractMatches(vMatched) == block.hashMerkleRoot);
     BOOST_CHECK(vMatched.size() == merkleBlock.vMatchedTxn.size());
     for (unsigned int i = 0; i < vMatched.size(); i++)
-        BOOST_CHECK(vMatched[i] == merkleBlock.vMatchedTxn[i].first);
+        BOOST_CHECK(vMatched[i] == merkleBlock.vMatchedTxn[i].second);
 }
 
 BOOST_AUTO_TEST_SUITE_END()

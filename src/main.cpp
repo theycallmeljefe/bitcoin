@@ -2177,8 +2177,11 @@ CMerkleBlock::CMerkleBlock(const CBlock& block, CBloomFilter& filter)
 {
     header = block.GetBlockHeader();
 
-    vector<bool> vMatch(block.vtx.size());
-    vector<uint256> vHashes(block.vtx.size());
+    vector<bool> vMatch;
+    vector<uint256> vHashes;
+
+    vMatch.reserve(block.vtx.size());
+    vHashes.reserve(block.vtx.size());
     vMatchedTxn.reserve(block.vtx.size());
 
     for (unsigned int i = 0; i < block.vtx.size(); i++)
