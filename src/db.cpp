@@ -291,11 +291,11 @@ void CDB::Close()
     // Flush database activity from memory pool to disk log
     unsigned int nMinutes = 0;
     if (fReadOnly)
-        nMinutes = 1;
+        nMinutes = 10;
     if (IsChainFile(strFile))
-        nMinutes = 2;
+        nMinutes = 20;
     if (IsChainFile(strFile) && IsInitialBlockDownload())
-        nMinutes = 5;
+        nMinutes = 50;
 
     bitdb.dbenv.txn_checkpoint(nMinutes ? GetArg("-dblogsize", 100)*1024 : 0, nMinutes, 0);
 
