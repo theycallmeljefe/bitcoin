@@ -3559,6 +3559,10 @@ CBlock* CreateNewBlock(CReserveKey& reservekey)
                     nTotalIn += mempool.mapTx[txin.prevout.hash].vout[txin.prevout.n].nValue;
                     continue;
                 }
+
+                if (!txindex.vSpent[txin.prevout.n].IsNull())
+                    printf("ERROR: mempool transaction input is spent! txid=%s input=%s\n", txPrev.GetHash().ToString().c_str(), txin.prevout.ToString().c_str());
+
                 int64 nValueIn = txPrev.vout[txin.prevout.n].nValue;
                 nTotalIn += nValueIn;
 
