@@ -9,11 +9,14 @@
 #include <vector>
 
 #include "allocators.h"
+
 #include "serialize.h"
 #include "uint256.h"
 #include "hash.h"
 
 #include <openssl/ec.h> // for EC_KEY definition
+
+#include "hmac.h"
 
 // secp160k1
 // const unsigned int PRIVATE_KEY_SIZE = 192;
@@ -156,6 +159,37 @@ public:
     bool VerifyCompact(uint256 hash, const std::vector<unsigned char>& vchSig);
 
     bool IsValid();
+};
+
+class CDetKey
+{
+private:
+    std::vector<unsigned char> vchChaincode;
+
+    bool fHaveSecret;
+    CSecret secret;
+
+    bool fHavePubKey;
+    std::vector<unsigned char> vchPubKey;
+
+    bool CalcPubKey();
+
+
+public:
+    // initializers
+    bool SetMaster(const std::vector<unsigned char>& vchMaster);
+    bool SetPublic(const std::vector<unsigned char>& vchChaincodeIn, const CPubKey& vchPubKeyIn);
+    bool SetSecret(const std::vector<unsigned char>& vchChaincodeIn, const CSecret &secretIn, const CPubKey *pvchPubKeyIn = NULL);
+
+    // accessors
+    bool GetPubKey(CPubKey &vchPubKeyOut);
+    bool GetSecret(CSecret& secretOut) const;
+    bool HaveSecret() const { return fHaveSecret; }
+    bool GetChaincode(std::vector<unsigned char> &vchChaincode);
+
+    // derive
+    bool Neuter(CDetKey& keyOut);
+    bool Derive(CDetKey& keyOut, uint32_t n);
 };
 
 #endif
