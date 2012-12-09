@@ -397,7 +397,7 @@ bool CTransaction::IsStandard() const
 // expensive-to-check-upon-redemption script like:
 //   DUP CHECKSIG DROP ... repeated 100 times... OP_1
 //
-bool CTransaction::AreInputsStandard(CCoinsViewCache& mapInputs) const
+bool CTransaction::AreInputsStandard(CScriptVerifyContext &cont, CCoinsViewCache& mapInputs) const
 {
     if (IsCoinBase())
         return true; // Coinbases don't use vin normally
@@ -422,7 +422,7 @@ bool CTransaction::AreInputsStandard(CCoinsViewCache& mapInputs) const
         // beside "push data" in the scriptSig the
         // IsStandard() call returns false
         vector<vector<unsigned char> > stack;
-        if (!EvalScript(stack, vin[i].scriptSig, *this, i, false, 0))
+        if (!EvalScript(cont, stack, vin[i].scriptSig, *this, i, false, 0))
             return false;
 
         if (whichType == TX_SCRIPTHASH)
@@ -637,6 +637,8 @@ void CTxMemPool::pruneSpent(const uint256 &hashTx, CCoins &coins)
     }
 }
 
+static CScriptVerifyContext contMempool;
+
 bool CTxMemPool::accept(CTransaction &tx, bool fCheckInputs,
                         bool* pfMissingInputs)
 {
@@ -731,7 +733,7 @@ bool CTxMemPool::accept(CTransaction &tx, bool fCheckInputs,
         }
 
         // Check for non-standard pay-to-script-hash in inputs
-        if (!tx.AreInputsStandard(view) && !fTestNet)
+        if (!tx.AreInputsStandard(contMempool, view) && !fTestNet)
             return error("CTxMemPool::accept() : nonstandard transaction input");
 
         // Note: if you modify this code to accept non-standard transactions, then
@@ -774,7 +776,7 @@ bool CTxMemPool::accept(CTransaction &tx, bool fCheckInputs,
 
         // Check against previous transactions
         // This is done last to help prevent CPU exhaustion denial-of-service attacks.
-        if (!tx.CheckInputs(view, true, SCRIPT_VERIFY_P2SH))
+        if (!tx.CheckInputs(contMempool, view, true, SCRIPT_VERIFY_P2SH))
         {
             return error("CTxMemPool::accept() : ConnectInputs failed %s", hash.ToString().substr(0,10).c_str());
         }
@@ -919,7 +921,7 @@ bool CMerkleTx::AcceptToMemoryPool(bool fCheckInputs)
 {
     if (fClient)
     {
-        if (!IsInMainChain() && !ClientCheckInputs())
+        if (!IsInMainChain() && !ClientCheckInputs(contMempool))
             return false;
         return CTransaction::AcceptToMemoryPool(false);
     }
@@ -949,7 +951,6 @@ bool CWalletTx::AcceptWalletTransaction(bool fCheckInputs)
     }
     return false;
 }
-
 
 // Return transaction in tx, and if it was found inside a block, its hash is placed in hashBlock
 bool GetTransaction(const uint256 &hash, CTransaction &txOut, uint256 &hashBlock, bool fAllowSlow)
@@ -1347,19 +1348,19 @@ bool CTransaction::HaveInputs(CCoinsViewCache &inputs) const
     return true;
 }
 
-bool CScriptCheck::operator()() const {
+bool CScriptCheck::operator()(CScriptVerifyContext &cont) const {
     const CScript &scriptSig = ptxTo->vin[nIn].scriptSig;
-    if (!VerifyScript(scriptSig, scriptPubKey, *ptxTo, nIn, nFlags, nHashType))
+    if (!VerifyScript(cont, scriptSig, scriptPubKey, *ptxTo, nIn, nFlags, nHashType))
         return error("CScriptCheck() : %s VerifySignature failed", ptxTo->GetHash().ToString().substr(0,10).c_str());
     return true;
 }
 
-bool VerifySignature(const CCoins& txFrom, const CTransaction& txTo, unsigned int nIn, unsigned int flags, int nHashType)
+bool VerifySignature(CScriptVerifyContext &cont, const CCoins& txFrom, const CTransaction& txTo, unsigned int nIn, unsigned int flags, int nHashType)
 {
-    return CScriptCheck(txFrom, txTo, nIn, flags, nHashType)();
+    return CScriptCheck(txFrom, txTo, nIn, flags, nHashType)(cont);
 }
 
-bool CTransaction::CheckInputs(CCoinsViewCache &inputs, bool fScriptChecks, unsigned int flags, std::vector<CScriptCheck> *pvChecks) const
+bool CTransaction::CheckInputs(CScriptVerifyContext &cont, CCoinsViewCache &inputs, bool fScriptChecks, unsigned int flags, std::vector<CScriptCheck> *pvChecks) const
 {
     if (!IsCoinBase())
     {
@@ -1422,7 +1423,7 @@ bool CTransaction::CheckInputs(CCoinsViewCache &inputs, bool fScriptChecks, unsi
                 if (pvChecks) {
                     pvChecks->push_back(CScriptCheck());
                     check.swap(pvChecks->back());
-                } else if (!check())
+                } else if (!check(cont))
                     return DoS(100,false);
             }
         }
@@ -1432,7 +1433,7 @@ bool CTransaction::CheckInputs(CCoinsViewCache &inputs, bool fScriptChecks, unsi
 }
 
 
-bool CTransaction::ClientCheckInputs() const
+bool CTransaction::ClientCheckInputs(CScriptVerifyContext &cont) const
 {
     if (IsCoinBase())
         return false;
@@ -1453,7 +1454,7 @@ bool CTransaction::ClientCheckInputs() const
                 return false;
 
             // Verify signature
-            if (!VerifySignature(CCoins(txPrev, -1), *this, i, SCRIPT_VERIFY_P2SH, 0))
+            if (!VerifySignature(cont, CCoins(txPrev, -1), *this, i, SCRIPT_VERIFY_P2SH, 0))
                 return error("ConnectInputs() : VerifySignature failed");
 
             ///// this is redundant with the mempool.mapNextTx stuff,
@@ -1573,7 +1574,7 @@ void static FlushBlockFile()
 
 bool FindUndoPos(int nFile, CDiskBlockPos &pos, unsigned int nAddSize);
 
-static CCheckQueue<CScriptCheck> scriptcheckqueue(128);
+static CCheckQueue<CScriptCheck, CScriptVerifyContext> scriptcheckqueue(128);
 
 void ThreadScriptCheck(void*) {
     vnThreadsRunning[THREAD_SCRIPTCHECK]++;
@@ -1585,6 +1586,8 @@ void ThreadScriptCheck(void*) {
 void ThreadScriptCheckQuit() {
     scriptcheckqueue.Quit();
 }
+
+static CScriptVerifyContext contMain;
 
 bool CBlock::ConnectBlock(CBlockIndex* pindex, CCoinsViewCache &view, bool fJustCheck)
 {
@@ -1629,7 +1632,7 @@ bool CBlock::ConnectBlock(CBlockIndex* pindex, CCoinsViewCache &view, bool fJust
 
     CBlockUndo blockundo;
 
-    CCheckQueueControl<CScriptCheck> control(fScriptChecks && nScriptCheckThreads ? &scriptcheckqueue : NULL);
+    CCheckQueueControl<CScriptCheck,CScriptVerifyContext> control(fScriptChecks && nScriptCheckThreads ? &scriptcheckqueue : NULL);
 
     int64 nStart = GetTimeMicros();
     int64 nFees = 0;
@@ -1663,7 +1666,7 @@ bool CBlock::ConnectBlock(CBlockIndex* pindex, CCoinsViewCache &view, bool fJust
             nFees += tx.GetValueIn(view)-tx.GetValueOut();
 
             std::vector<CScriptCheck> vChecks;
-            if (!tx.CheckInputs(view, fScriptChecks, flags, nScriptCheckThreads ? &vChecks : NULL))
+            if (!tx.CheckInputs(contMain, view, fScriptChecks, flags, nScriptCheckThreads ? &vChecks : NULL))
                 return false;
             control.Add(vChecks);
         }
@@ -3959,7 +3962,7 @@ CBlock* CreateNewBlock(CReserveKey& reservekey)
             if (nBlockSigOps + nTxSigOps >= MAX_BLOCK_SIGOPS)
                 continue;
 
-            if (!tx.CheckInputs(viewTemp, true, SCRIPT_VERIFY_P2SH))
+            if (!tx.CheckInputs(contMain, viewTemp, true, SCRIPT_VERIFY_P2SH))
                 continue;
 
             CTxUndo txundo;

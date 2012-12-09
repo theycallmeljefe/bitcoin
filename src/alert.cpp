@@ -141,10 +141,11 @@ bool CAlert::RelayTo(CNode* pnode) const
 
 bool CAlert::CheckSignature() const
 {
+    CSigVerifyContext cont;
     CKey key;
     if (!key.SetPubKey(ParseHex(fTestNet ? pszTestKey : pszMainKey)))
         return error("CAlert::CheckSignature() : SetPubKey failed");
-    if (!key.Verify(Hash(vchMsg.begin(), vchMsg.end()), vchSig))
+    if (!key.Verify(cont, Hash(vchMsg.begin(), vchMsg.end()), vchSig))
         return error("CAlert::CheckSignature() : verify signature failed");
 
     // Now unserialize the data

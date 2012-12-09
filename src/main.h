@@ -548,7 +548,7 @@ public:
         @return True if all inputs (scriptSigs) use only standard transaction forms
         @see CTransaction::FetchInputs
     */
-    bool AreInputsStandard(CCoinsViewCache& mapInputs) const;
+    bool AreInputsStandard(CScriptVerifyContext &cont, CCoinsViewCache& mapInputs) const;
 
     /** Count ECDSA signature operations the old-fashioned (pre-0.6) way
         @return number of sigops this transaction's outputs will produce when spent
@@ -635,7 +635,7 @@ public:
 
 
     // Do all possible client-mode checks
-    bool ClientCheckInputs() const;
+    bool ClientCheckInputs(CScriptVerifyContext &cont) const;
 
     // Check whether all prevouts of this transaction are present in the UTXO set represented by view
     bool HaveInputs(CCoinsViewCache &view) const;
@@ -643,7 +643,7 @@ public:
     // Check whether all inputs of this transaction are valid (no double spends, scripts & sigs, amounts)
     // This does not modify the UTXO set. If pvChecks is not NULL, script checks are pushed onto it
     // instead of being performed inline.
-    bool CheckInputs(CCoinsViewCache &view, bool fScriptChecks = true,
+    bool CheckInputs(CScriptVerifyContext &cont, CCoinsViewCache &view, bool fScriptChecks = true,
                      unsigned int flags = SCRIPT_VERIFY_P2SH | SCRIPT_VERIFY_STRICTENC,
                      std::vector<CScriptCheck> *pvChecks = NULL) const;
 
@@ -1035,7 +1035,7 @@ public:
         scriptPubKey(txFromIn.vout[txToIn.vin[nInIn].prevout.n].scriptPubKey),
         ptxTo(&txToIn), nIn(nInIn), nFlags(nFlagsIn), nHashType(nHashTypeIn) { }
 
-    bool operator()() const;
+    bool operator()(CScriptVerifyContext &cont) const;
 
     void swap(CScriptCheck &check) {
         scriptPubKey.swap(check.scriptPubKey);

@@ -11,7 +11,7 @@
 #include <vector>
 #include <algorithm>
 
-template<typename T> class CCheckQueueControl;
+template<typename T, typename C> class CCheckQueueControl;
 
 /** Queue for verifications that have to be performed.
   * The verifications are represented by a type T, which must provide an
@@ -22,7 +22,7 @@ template<typename T> class CCheckQueueControl;
   * the master is done adding work, it temporarily joins the worker pool
   * as an N'th worker, until all jobs are done.
   */
-template<typename T> class CCheckQueue {
+template<typename T, typename C> class CCheckQueue {
 private:
     // Mutex to protect the inner state
     boost::mutex mutex;
@@ -59,6 +59,7 @@ private:
 
     // Internal function that does bulk of the verification work.
     bool Loop(bool fMaster = false) {
+        C cont;
         boost::condition_variable &cond = fMaster ? condMaster : condWorker;
         std::vector<T> vChecks;
         vChecks.reserve(nBatchSize);
@@ -112,7 +113,7 @@ private:
             // execute work
             BOOST_FOREACH(T &check, vChecks)
                 if (fOk)
-                    fOk = check();
+                    fOk = check(cont);
             vChecks.clear();
         } while(true);
     }
@@ -155,19 +156,19 @@ public:
         condWorker.notify_all(); 
     }
 
-    friend class CCheckQueueControl<T>;
+    friend class CCheckQueueControl<T,C>;
 };
 
 /** RAII-style controller object for a CCheckQueue that guarantees the passed
  *  queue is finished before continuing.
  */
-template<typename T> class CCheckQueueControl {
+template<typename T, typename C> class CCheckQueueControl {
 private:
-    CCheckQueue<T> *pqueue;
+    CCheckQueue<T,C> *pqueue;
     bool fDone;
 
 public:
-    CCheckQueueControl(CCheckQueue<T> *pqueueIn) : pqueue(pqueueIn), fDone(false) {
+    CCheckQueueControl(CCheckQueue<T,C> *pqueueIn) : pqueue(pqueueIn), fDone(false) {
         // passed queue is supposed to be unused, or NULL
         if (pqueue != NULL) {
             assert(pqueue->nTotal == pqueue->nIdle);

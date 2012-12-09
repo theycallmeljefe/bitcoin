@@ -204,26 +204,37 @@ void static secp256k1Splitk (BIGNUM *bnk1, BIGNUM *bnk2, const BIGNUM *bnk, cons
     BN_CTX_end(ctx);
 }
 
-bool static secp256k1Verify(const unsigned char hash[32], const unsigned char *dersig, size_t sigsize, const EC_KEY *pkey)
+CSigVerifyContext::CSigVerifyContext() {
+    pkey = EC_KEY_new_by_curve_name(NID_secp256k1);
+    group = EC_KEY_get0_group(pkey);
+    Ylam = EC_POINT_new(group);
+    R = EC_POINT_new(group);
+    ctx = BN_CTX_new();
+}
+
+CSigVerifyContext::~CSigVerifyContext() {
+    BN_CTX_free(ctx);
+    EC_POINT_free(R);
+    EC_POINT_free(Ylam);
+    EC_KEY_free(pkey);
+}
+
+bool static secp256k1Verify(CSigVerifyContext &cont, const unsigned char hash[32], const unsigned char *dersig, size_t sigsize, const EC_KEY *pkey)
 {
     bool rslt = false;;
-    const EC_GROUP *group = EC_KEY_get0_group(pkey);
     const EC_POINT *Y = EC_KEY_get0_public_key(pkey);
-    EC_POINT *Ylam = EC_POINT_new(group);
-    EC_POINT *R = EC_POINT_new(group);
     const EC_POINT *Points[3];
-    BN_CTX *ctx = BN_CTX_new();
     const BIGNUM *bnexps[3];
-    BN_CTX_start(ctx);
-    BIGNUM *bnx = BN_CTX_get(ctx);
-    BIGNUM *bny = BN_CTX_get(ctx);
-    BIGNUM *bnk = BN_CTX_get(ctx);
-    BIGNUM *bnk1 = BN_CTX_get(ctx);
-    BIGNUM *bnk2 = BN_CTX_get(ctx);
-    BIGNUM *bnk1a = BN_CTX_get(ctx);
-    BIGNUM *bnk2a = BN_CTX_get(ctx);
-    BIGNUM *bnsinv = BN_CTX_get(ctx);
-    BIGNUM *bnh = BN_CTX_get(ctx);
+    BN_CTX_start(cont.ctx);
+    BIGNUM *bnx = BN_CTX_get(cont.ctx);
+    BIGNUM *bny = BN_CTX_get(cont.ctx);
+    BIGNUM *bnk = BN_CTX_get(cont.ctx);
+    BIGNUM *bnk1 = BN_CTX_get(cont.ctx);
+    BIGNUM *bnk2 = BN_CTX_get(cont.ctx);
+    BIGNUM *bnk1a = BN_CTX_get(cont.ctx);
+    BIGNUM *bnk2a = BN_CTX_get(cont.ctx);
+    BIGNUM *bnsinv = BN_CTX_get(cont.ctx);
+    BIGNUM *bnh = BN_CTX_get(cont.ctx);
     bnh = BN_bin2bn(hash, 32, bnh);
     ECDSA_SIG *sig = d2i_ECDSA_SIG(NULL, &dersig, sigsize);
 
@@ -234,36 +245,32 @@ bool static secp256k1Verify(const unsigned char hash[32], const unsigned char *d
         || BN_is_zero(sig->s) || BN_is_negative(sig->s) || BN_ucmp(sig->s, secp256k1Consts.bnn) >= 0)
         goto done;
 
-    EC_POINT_get_affine_coordinates_GFp(group, Y, bnx, bny, ctx);
-    BN_mod_mul(bnx, bnx, secp256k1Consts.bnbeta, secp256k1Consts.bnp, ctx);
-    EC_POINT_set_affine_coordinates_GFp(group, Ylam, bnx, bny, ctx);
+    EC_POINT_get_affine_coordinates_GFp(cont.group, Y, bnx, bny, cont.ctx);
+    BN_mod_mul(bnx, bnx, secp256k1Consts.bnbeta, secp256k1Consts.bnp, cont.ctx);
+    EC_POINT_set_affine_coordinates_GFp(cont.group, cont.Ylam, bnx, bny, cont.ctx);
 
     Points[0] = secp256k1Consts.Glam;
     Points[1] = Y;
-    Points[2] = Ylam;
+    Points[2] = cont.Ylam;
 
-    BN_mod_inverse(bnsinv, sig->s, secp256k1Consts.bnn, ctx);
-    BN_mod_mul(bnk, bnh, bnsinv, secp256k1Consts.bnn, ctx);
-    secp256k1Splitk(bnk1, bnk2, bnk, secp256k1Consts.bnn, ctx);
+    BN_mod_inverse(bnsinv, sig->s, secp256k1Consts.bnn, cont.ctx);
+    BN_mod_mul(bnk, bnh, bnsinv, secp256k1Consts.bnn, cont.ctx);
+    secp256k1Splitk(bnk1, bnk2, bnk, secp256k1Consts.bnn, cont.ctx);
     bnexps[0] = bnk2;
-    BN_mod_mul(bnk, sig->r, bnsinv, secp256k1Consts.bnn, ctx);
-    secp256k1Splitk(bnk1a, bnk2a, bnk, secp256k1Consts.bnn, ctx);
+    BN_mod_mul(bnk, sig->r, bnsinv, secp256k1Consts.bnn, cont.ctx);
+    secp256k1Splitk(bnk1a, bnk2a, bnk, secp256k1Consts.bnn, cont.ctx);
     bnexps[1] = bnk1a;
     bnexps[2] = bnk2a;
 
-    EC_POINTs_mul(group, R, bnk1, 3, Points, bnexps, ctx);
-    EC_POINT_get_affine_coordinates_GFp(group, R, bnx, NULL, ctx);
-    BN_mod(bnx, bnx, secp256k1Consts.bnn, ctx);
+    EC_POINTs_mul(cont.group, cont.R, bnk1, 3, Points, bnexps, cont.ctx);
+    EC_POINT_get_affine_coordinates_GFp(cont.group, cont.R, bnx, NULL, cont.ctx);
+    BN_mod(bnx, bnx, secp256k1Consts.bnn, cont.ctx);
     rslt = (BN_cmp(bnx, sig->r) == 0);
 
 done:
     if (sig)
         ECDSA_SIG_free(sig);
-    EC_POINT_free(Ylam);
-    EC_POINT_free(R);
-    BN_CTX_end(ctx);
-    BN_CTX_free(ctx);
-
+    BN_CTX_end(cont.ctx);
     return rslt;
 }
 
@@ -517,9 +524,9 @@ bool CKey::SetCompactSignature(uint256 hash, const std::vector<unsigned char>& v
     return false;
 }
 
-bool CKey::Verify(uint256 hash, const std::vector<unsigned char>& vchSig)
+bool CKey::Verify(CSigVerifyContext &cont, uint256 hash, const std::vector<unsigned char>& vchSig)
 {
-    return secp256k1Verify((unsigned char*)&hash, &vchSig[0], vchSig.size(), pkey);
+    return secp256k1Verify(cont, (unsigned char*)&hash, &vchSig[0], vchSig.size(), pkey);
 }
 
 bool CKey::VerifyCompact(uint256 hash, const std::vector<unsigned char>& vchSig)

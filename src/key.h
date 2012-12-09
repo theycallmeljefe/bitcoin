@@ -99,6 +99,21 @@ public:
 };
 
 
+class CSigVerifyContext
+{
+private:
+    EC_KEY *pkey;
+
+public:
+    const EC_GROUP *group;
+    EC_POINT *Ylam;
+    EC_POINT *R;
+    BN_CTX *ctx;
+
+    CSigVerifyContext();
+    ~CSigVerifyContext();
+};
+
 // secure_allocator is defined in allocators.h
 // CPrivKey is a serialized private key, with all parameters included (279 bytes)
 typedef std::vector<unsigned char, secure_allocator<unsigned char> > CPrivKey;
@@ -150,7 +165,7 @@ public:
     // (the signature is a valid signature of the given data for that key)
     bool SetCompactSignature(uint256 hash, const std::vector<unsigned char>& vchSig);
 
-    bool Verify(uint256 hash, const std::vector<unsigned char>& vchSig);
+    bool Verify(CSigVerifyContext &cont, uint256 hash, const std::vector<unsigned char>& vchSig);
 
     // Verify a compact signature
     bool VerifyCompact(uint256 hash, const std::vector<unsigned char>& vchSig);
