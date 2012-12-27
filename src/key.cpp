@@ -372,11 +372,19 @@ bool CKey::SetCompactSignature(uint256 hash, const std::vector<unsigned char>& v
 
 bool CKey::Verify(uint256 hash, const std::vector<unsigned char>& vchSig)
 {
-    // -1 = error, 0 = bad sig, 1 = good
-    if (ECDSA_verify(0, (unsigned char*)&hash, sizeof(hash), &vchSig[0], vchSig.size(), pkey) != 1)
-        return false;
+    bool ret = false;
+    ECDSA_SIG *sig = ECDSA_SIG_new();
+    const unsigned char *ptr = &vchSig[0];
+    if (d2i_ECDSA_SIG(&sig, &ptr, vchSig.size()) == NULL)
+        goto err;
 
-    return true;
+    ret = (ECDSA_do_verify((unsigned char*)&hash, sizeof(hash), sig, pkey) == 1);
+
+err:
+    if (sig)
+        ECDSA_SIG_free(sig);
+
+    return ret;
 }
 
 bool CKey::VerifyCompact(uint256 hash, const std::vector<unsigned char>& vchSig)
