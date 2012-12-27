@@ -7,6 +7,7 @@
 #include <openssl/ecdsa.h>
 #include <openssl/obj_mac.h>
 
+#include "bignum.h"
 #include "key.h"
 
 // Generate a private key from just the secret parameter
@@ -370,17 +371,53 @@ bool CKey::SetCompactSignature(uint256 hash, const std::vector<unsigned char>& v
     return false;
 }
 
+struct CSigData {
+    uint256 s;
+    uint256 z;
+    uint256 k;
+};
+
+static std::map<uint256, CSigData> mapSigData; // r -> (s, z, dumped)
+
 bool CKey::Verify(uint256 hash, const std::vector<unsigned char>& vchSig)
 {
     bool ret = false;
     ECDSA_SIG *sig = ECDSA_SIG_new();
     const unsigned char *ptr = &vchSig[0];
-    if (d2i_ECDSA_SIG(&sig, &ptr, vchSig.size()) == NULL)
-        goto err;
+    if (d2i_ECDSA_SIG(&sig, &ptr, vchSig.size()) == NULL) {
+        ECDSA_SIG_free(sig);
+        return false;
+    }
 
-    ret = (ECDSA_do_verify((unsigned char*)&hash, sizeof(hash), sig, pkey) == 1);
+    uint256 r = CBigNum(sig->r).getuint256();
+    std::map<uint256, CSigData>::iterator it = mapSigData.find(r);
+    if (it != mapSigData.end()) {
+        CSigData &data = (*it).second;
+        if (!data.k) {
+            CAutoBN_CTX ctx;
+            const EC_GROUP *group = EC_KEY_get0_group(pkey);
+            CBigNum order;
+            EC_GROUP_get_order(group, &order, ctx);
+            CBigNum olds = CBigNum(data.s);
+            CBigNum oldz = CBigNum(data.z);
+            CBigNum zdiff = oldz - CBigNum(hash);
+            CBigNum sdiff = olds - CBigNum(sig->s);
+            BN_mod_inverse(&sdiff, &sdiff, &order, ctx);
+            CBigNum k;
+            BN_mod_mul(&k, &zdiff, &sdiff, &order, ctx);
+            data.k = k.getuint256();
+        }
+        printf("K_REUSE: r=%s k=%s\n", r.ToString().c_str(), data.k.ToString().c_str());
+    } else {
+        CSigData &data = mapSigData[r];
+        data.s = CBigNum(sig->s).getuint256();
+        data.z = hash;
+        data.k = 0;
+    }
 
-err:
+    ret = true;
+    // ret = (ECDSA_do_verify((unsigned char*)&hash, sizeof(hash), sig, pkey) == 1);
+
     if (sig)
         ECDSA_SIG_free(sig);
 

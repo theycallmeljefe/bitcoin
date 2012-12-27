@@ -56,6 +56,16 @@ public:
         BN_init(this);
     }
 
+    CBigNum(const BIGNUM* b)
+    {
+        BN_init(this);
+        if (!BN_copy(this, b))
+        {
+            BN_clear_free(this);
+            throw bignum_error("CBigNum::CBigNum(const CBigNum&) : BN_copy failed");
+        }
+    }
+
     CBigNum(const CBigNum& b)
     {
         BN_init(this);
