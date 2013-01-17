@@ -166,6 +166,9 @@ obj/%.o: %.cpp
 bitcoind: $(OBJS:obj/%=obj/%)
 	$(LINK) $(xCXXFLAGS) -o $@ $^ $(xLDFLAGS) $(LIBS)
 
+bench: obj/bench.o obj/key.o
+	$(LINK) $(xCXXFLAGS) -o $@ $^ $(xLDFLAGS) -lcrypto -lboost_thread$(BOOST_LIB_SUFFIX)
+
 TESTOBJS := $(patsubst test/%.cpp,obj-test/%.o,$(wildcard test/*.cpp))
 
 obj-test/%.o: test/%.cpp

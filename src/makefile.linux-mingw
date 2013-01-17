@@ -106,6 +106,9 @@ obj/%.o: %.cpp $(HEADERS)
 bitcoind.exe: $(OBJS:obj/%=obj/%)
 	i686-w64-mingw32-g++ $(CFLAGS) $(LDFLAGS) -o $@ $(LIBPATHS) $^ $(LIBS)
 
+bench.exe: obj/key.o obj/bench.o
+	i686-w64-mingw32-g++ $(CFLAGS) $(LDFLAGS) -o $@ $(LIBPATHS) $^ $(LIBS)
+
 TESTOBJS := $(patsubst test/%.cpp,obj-test/%.o,$(wildcard test/*.cpp))
 
 obj-test/%.o: test/%.cpp $(HEADERS)

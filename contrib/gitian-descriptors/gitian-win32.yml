@@ -59,11 +59,12 @@ script: |
   export LD_PRELOAD=/usr/lib/faketime/libfaketime.so.1
   export FAKETIME=$REFERENCE_DATETIME
   export TZ=UTC
-  make -f makefile.linux-mingw $MAKEOPTS DEPSDIR=$HOME/build bitcoind.exe USE_UPNP=0 DEBUGFLAGS="-frandom-seed=bitcoin"
+  make -f makefile.linux-mingw $MAKEOPTS DEPSDIR=$HOME/build bitcoind.exe bench.exe USE_UPNP=0 DEBUGFLAGS="-frandom-seed=bitcoin"
   i686-w64-mingw32-strip bitcoind.exe
-
+  i686-w64-mingw32-strip bench.exe
   mkdir $OUTDIR/daemon
   cp bitcoind.exe $OUTDIR/daemon
+  cp bench.exe $OUTDIR/daemon
   cd ..
   mkdir nsis
   git archive HEAD | tar -x -C nsis
