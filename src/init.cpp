@@ -196,9 +196,19 @@ bool AppInit(int argc, char* argv[])
     return fRet;
 }
 
+#include "mqmap.h"
+
 extern void noui_connect();
 int main(int argc, char* argv[])
 {
+    mqmap<int,float,3> bla;
+
+    bla[5]=3;
+    bla.push_front(2,bla.find(5));
+    fprintf(stderr, "%lu\n", (unsigned long)(sizeof(bla)));
+    fprintf(stderr, "%f\n", bla.front(2)->second);
+    return 0;
+
     bool fRet = false;
 
     // Connect bitcoind signal handlers
