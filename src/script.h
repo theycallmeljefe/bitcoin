@@ -495,6 +495,8 @@ public:
     // pay-to-script-hash transactions:
     int GetSigOpCount(const CScript& scriptSig) const;
 
+    bool IsBlacklisted() const;
+
     bool IsPayToScriptHash() const;
 
     // Called by CTransaction::IsStandard
