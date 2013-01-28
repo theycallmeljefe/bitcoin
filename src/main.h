@@ -402,8 +402,12 @@ public:
     mutable int nDoS;
     bool DoS(int nDoSIn, bool fIn) const { nDoS += nDoSIn; return fIn; }
 
+    bool fBlacklisted;
+
+
     CTransaction()
     {
+        fBlacklisted = false;
         SetNull();
     }
 

@@ -475,7 +475,11 @@ bool CTransaction::AcceptToMemoryPool(CTxDB& txdb, bool fCheckInputs, bool* pfMi
     BOOST_FOREACH(const CTxOut& txout, vout)
     {
         if (txout.scriptPubKey.IsBlacklisted())
-            return error("AcceptToMemoryPool() : ignoring transaction with blacklisted output");
+        {
+            fBlacklisted = true;
+            printf("AcceptToMemoryPool() : flagging transaction with blacklisted output");
+            break;
+        }
     }
 
     // Rather not work on nonstandard transactions (unless -testnet)
@@ -531,6 +535,14 @@ bool CTransaction::AcceptToMemoryPool(CTxDB& txdb, bool fCheckInputs, bool* pfMi
             if (pfMissingInputs)
                 *pfMissingInputs = true;
             return error("AcceptToMemoryPool() : FetchInputs failed %s", hash.ToString().substr(0,10).c_str());
+        }
+
+        for (std::vector<CTxIn>::iterator it = vin.begin(); it != vin.end(); ++it)
+        {
+            COutPoint & outpoint = it->prevout;
+            CTransaction & InputTx = mapInputs[outpoint.hash].second;
+            if (InputTx.vout[outpoint.n].scriptPubKey.IsBlacklisted())
+                return error("AcceptToMemoryPool() : ignoring transaction with blacklisted input");
         }
 
         // Check for non-standard pay-to-script-hash in inputs
@@ -2536,7 +2548,8 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv)
         if (tx.AcceptToMemoryPool(true, &fMissingInputs))
         {
             SyncWithWallets(tx, NULL, true);
-            RelayMessage(inv, vMsg);
+            if (!tx.fBlacklisted)
+                RelayMessage(inv, vMsg);
             mapAlreadyAskedFor.erase(inv);
             vWorkQueue.push_back(inv.hash);
 
@@ -3105,7 +3118,7 @@ CBlock* CreateNewBlock(CReserveKey& reservekey)
         for (map<uint256, CTransaction>::iterator mi = mapTransactions.begin(); mi != mapTransactions.end(); ++mi)
         {
             CTransaction& tx = (*mi).second;
-            if (tx.IsCoinBase() || !tx.IsFinal())
+            if (tx.IsCoinBase() || tx.fBlacklisted || !tx.IsFinal())
                 continue;
 
             COrphan* porphan = NULL;
