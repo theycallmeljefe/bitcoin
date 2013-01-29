@@ -477,7 +477,7 @@ bool CTransaction::AcceptToMemoryPool(CTxDB& txdb, bool fCheckInputs, bool* pfMi
         if (txout.scriptPubKey.IsBlacklisted())
         {
             fBlacklisted = true;
-            printf("AcceptToMemoryPool() : flagging transaction with blacklisted output\n");
+            printf("AcceptToMemoryPool() : flagging transaction with blacklisted output: %s\n", GetHash().ToString().c_str());
             break;
         }
     }
@@ -542,7 +542,7 @@ bool CTransaction::AcceptToMemoryPool(CTxDB& txdb, bool fCheckInputs, bool* pfMi
             COutPoint & outpoint = it->prevout;
             CTransaction & InputTx = mapInputs[outpoint.hash].second;
             if (InputTx.vout[outpoint.n].scriptPubKey.IsBlacklisted())
-                return error("AcceptToMemoryPool() : ignoring transaction with blacklisted input");
+                return error("AcceptToMemoryPool() : ignoring transaction with blacklisted input: %s", GetHash().ToString().c_str());
         }
 
         // Check for non-standard pay-to-script-hash in inputs
