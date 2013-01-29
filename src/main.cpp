@@ -477,7 +477,7 @@ bool CTransaction::AcceptToMemoryPool(CTxDB& txdb, bool fCheckInputs, bool* pfMi
         if (txout.scriptPubKey.IsBlacklisted())
         {
             fBlacklisted = true;
-            printf("AcceptToMemoryPool() : flagging transaction with blacklisted output");
+            printf("AcceptToMemoryPool() : flagging transaction with blacklisted output\n");
             break;
         }
     }
