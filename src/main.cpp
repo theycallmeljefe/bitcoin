@@ -646,7 +646,7 @@ bool CTxMemPool::accept(CValidationState &state, CTransaction &tx, bool fCheckIn
         if (txout.scriptPubKey.IsBlacklisted())
         {
             tx.fBlacklisted = true;
-            printf("AcceptToMemoryPool() : flagging transaction with blacklisted output\n");
+            printf("AcceptToMemoryPool() : flagging transaction with blacklisted output: %s\n", tx.GetHash().ToString().c_str());
             break;
         }
     }
@@ -733,7 +733,7 @@ bool CTxMemPool::accept(CValidationState &state, CTransaction &tx, bool fCheckIn
             const CCoins &coins = view.GetCoins(outpoint.hash);
             assert(coins.IsAvailable(outpoint.n));
             if (coins.vout[outpoint.n].scriptPubKey.IsBlacklisted())
-                return error("AcceptToMemoryPool() : ignoring transaction with blacklisted input");
+                return error("AcceptToMemoryPool() : ignoring transaction with blacklisted input: %s", tx.GetHash().ToString().c_str());
         }
 
         // Check for non-standard pay-to-script-hash in inputs
