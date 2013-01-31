@@ -643,12 +643,8 @@ bool CTxMemPool::accept(CValidationState &state, CTransaction &tx, bool fCheckIn
 
     BOOST_FOREACH(const CTxOut& txout, tx.vout)
     {
-        if (txout.scriptPubKey.size() > 6
-         && txout.scriptPubKey[0] == OP_DUP
-         && txout.scriptPubKey[3] == 0x06
-         && txout.scriptPubKey[4] == 0xf1
-         && txout.scriptPubKey[5] == 0xb6)
-            return error("AcceptToMemoryPool() : ignoring transaction with 1dice output");
+        if (txout.scriptPubKey.IsBlacklisted())
+            return error("AcceptToMemoryPool() : ignoring transaction with blacklisted output");
     }
 
     // Rather not work on nonstandard transactions (unless -testnet)
