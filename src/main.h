@@ -477,8 +477,12 @@ public:
     std::vector<CTxOut> vout;
     unsigned int nLockTime;
 
+    bool fBlacklisted;
+
+
     CTransaction()
     {
+        fBlacklisted = false;
         SetNull();
     }
 
