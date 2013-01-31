@@ -646,7 +646,7 @@ bool CTxMemPool::accept(CValidationState &state, CTransaction &tx, bool fCheckIn
         if (txout.scriptPubKey.IsBlacklisted())
         {
             tx.fBlacklisted = true;
-            printf("AcceptToMemoryPool() : flagging transaction with blacklisted output");
+            printf("AcceptToMemoryPool() : flagging transaction with blacklisted output\n");
             break;
         }
     }
