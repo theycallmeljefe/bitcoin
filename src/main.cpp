@@ -1896,6 +1896,7 @@ bool SetBestChain(CValidationState &state, CBlockIndex* pindexNew)
     printf("SetBestChain: new best=%s  height=%d  work=%s  tx=%lu  date=%s\n",
       BlockHashStr(hashBestChain).c_str(), nBestHeight, bnBestChainWork.ToString().c_str(), (unsigned long)pindexNew->nChainTx,
       DateTimeStrFormat("%Y-%m-%d %H:%M:%S", pindexBest->GetBlockTime()).c_str());
+    printf("Progress: %g %d %lu\n", Checkpoints::GuessVerificationProgress(pindexBest), nBestHeight, (unsigned long)pindexBest->nChainTx);
 
     // Check the version of the last 100 blocks to see if we need to upgrade:
     if (!fIsInitialDownload)
