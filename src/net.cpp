@@ -636,7 +636,7 @@ bool CNode::ReceiveMsgBytes(const char *pch, unsigned int nBytes)
     while (nBytes > 0) {
 
         // get current incomplete message, or create a new one
-        if (vRecvMsg.size() == 0 ||
+        if (vRecvMsg.empty() ||
             vRecvMsg.back().complete())
             vRecvMsg.push_back(CNetMessage(SER_NETWORK, nRecvVersion));
 
