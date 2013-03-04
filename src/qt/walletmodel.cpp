@@ -156,14 +156,29 @@ WalletModel::SendCoinsReturn WalletModel::sendCoins(const QList<SendCoinsRecipie
         return DuplicateAddress;
     }
 
-    if(total > getBalance())
+    // we do not use getBalance() here, because some coins could be locked or coin control could be active
+    int64 nBalance = 0;
+    std::vector<COutput> vCoins;
+    wallet->AvailableCoins(vCoins);
+    BOOST_FOREACH(const COutput& out, vCoins)
+        if (!coinControlHasSelected() || coinControlIsSelected(out.tx->GetHash(), out.i))
+            nBalance += out.tx->vout[out.i].nValue;
+
+    if(total > nBalance)
     {
         return AmountExceedsBalance;
     }
 
-    if((total + nTransactionFee) > getBalance())
+    if((total + nTransactionFee) > nBalance)
     {
         return SendCoinsReturn(AmountWithFeeExceedsBalance, nTransactionFee);
+    }
+
+    // if custom change address is set, check if valid address
+    if (!wallet->sCoinControlChange.empty())
+    {
+        if (!CBitcoinAddress(wallet->sCoinControlChange).IsValid())
+            return InvalidAddress;
     }
 
     {
@@ -186,7 +201,7 @@ WalletModel::SendCoinsReturn WalletModel::sendCoins(const QList<SendCoinsRecipie
 
         if(!fCreated)
         {
-            if((total + nFeeRequired) > wallet->GetBalance())
+            if((total + nFeeRequired) > nBalance)
             {
                 return SendCoinsReturn(AmountWithFeeExceedsBalance, nFeeRequired);
             }
@@ -379,3 +394,107 @@ void WalletModel::UnlockContext::CopyFrom(const UnlockContext& rhs)
     *this = rhs;
     rhs.relock = false;
 }
+
+bool WalletModel::getPubKey(const CKeyID &address, CPubKey& vchPubKeyOut) const
+{
+    return wallet->GetPubKey(address, vchPubKeyOut);   
+}
+
+// AvailableCoins + LockedCoins grouped by wallet address (put change in one group with wallet address) 
+void WalletModel::listCoins(std::map<QString, std::vector<COutput> >& mapCoins) const
+{
+    std::vector<COutput> vCoins;
+    wallet->AvailableCoins(vCoins);
+    
+    std::vector<COutPoint> vLockedCoins;
+    wallet->ListLockedCoins(vLockedCoins);
+    
+    // add locked coins
+    BOOST_FOREACH(const COutPoint& outpoint, vLockedCoins)
+    {
+        if (!wallet->mapWallet.count(outpoint.hash)) continue;
+        COutput out(&wallet->mapWallet[outpoint.hash], outpoint.n, wallet->mapWallet[outpoint.hash].GetDepthInMainChain());
+        vCoins.push_back(out);
+    }
+       
+    BOOST_FOREACH(const COutput& out, vCoins)
+    {
+        COutput cout = out;
+        
+        while (wallet->IsChange(cout.tx->vout[cout.i]) && cout.tx->vin.size() > 0 && wallet->IsMine(cout.tx->vin[0]))
+        {
+            if (!wallet->mapWallet.count(cout.tx->vin[0].prevout.hash)) break;
+            cout = COutput(&wallet->mapWallet[cout.tx->vin[0].prevout.hash], cout.tx->vin[0].prevout.n, 0);
+        }
+
+        CTxDestination address;
+        if(!ExtractDestination(cout.tx->vout[cout.i].scriptPubKey, address)) continue;
+        mapCoins[CBitcoinAddress(address).ToString().c_str()].push_back(out);
+    }
+}
+
+bool WalletModel::isLockedCoin(uint256 hash, unsigned int n) const
+{
+    return wallet->IsLockedCoin(hash, n);
+}
+
+void WalletModel::lockCoin(COutPoint& output)
+{
+    wallet->LockCoin(output);
+}
+
+void WalletModel::unlockCoin(COutPoint& output)
+{
+    wallet->UnlockCoin(output);
+}
+
+void WalletModel::listLockedCoins(std::vector<COutPoint>& vOutpts)
+{
+    wallet->ListLockedCoins(vOutpts);
+}
+
+// set custom change address
+void WalletModel::coinControlChangeAddress(const QString s)
+{
+    wallet->sCoinControlChange = s.toStdString();
+}
+
+bool WalletModel::coinControlHasSelected() const
+{
+    return wallet->CoinControlHasSelected();
+}
+
+bool WalletModel::coinControlIsSelected(uint256 hash, unsigned int n) const
+{
+    return wallet->CoinControlIsSelected(hash, n);
+}
+
+void WalletModel::coinControlSelect(COutPoint& output)
+{
+    wallet->CoinControlSelect(output);
+}
+
+void WalletModel::coinControlUnSelect(COutPoint& output)
+{
+    wallet->CoinControlUnSelect(output);
+}
+
+void WalletModel::coinControlUnSelectAll()
+{
+    wallet->CoinControlUnSelectAll();
+}
+        
+// return selected coin control outputs but as COutput instead of COutPoint
+void WalletModel::coinControlList(std::vector<COutput>& vCoinControl)
+{
+    std::vector<COutPoint> vOutpts;
+    wallet->CoinControlList(vOutpts);
+
+    BOOST_FOREACH(const COutPoint& outpoint, vOutpts)
+    {
+        if (!wallet->mapWallet.count(outpoint.hash)) continue;
+        COutput out(&wallet->mapWallet[outpoint.hash], outpoint.n, wallet->mapWallet[outpoint.hash].GetDepthInMainChain());
+        vCoinControl.push_back(out);
+    }
+}
+

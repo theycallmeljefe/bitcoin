@@ -1132,6 +1132,20 @@ bool CWallet::SelectCoins(int64 nTargetValue, set<pair<const CWalletTx*,unsigned
     vector<COutput> vCoins;
     AvailableCoins(vCoins);
 
+    // coin control -> return all selected outputs (we want all selected to go into the transaction for sure)
+    if (CoinControlHasSelected())
+    {
+        BOOST_FOREACH(const COutput& out, vCoins)
+        {
+            if (CoinControlIsSelected(out.tx->GetHash(), out.i))
+            {
+                nValueRet += out.tx->vout[out.i].nValue;
+                setCoinsRet.insert(make_pair(out.tx, out.i));
+            }
+        }
+        return (nValueRet >= nTargetValue);
+    }
+
     return (SelectCoinsMinConf(nTargetValue, 1, 6, vCoins, setCoinsRet, nValueRet) ||
             SelectCoinsMinConf(nTargetValue, 1, 1, vCoins, setCoinsRet, nValueRet) ||
             SelectCoinsMinConf(nTargetValue, 0, 1, vCoins, setCoinsRet, nValueRet));
@@ -1215,22 +1229,32 @@ bool CWallet::CreateTransaction(const vector<pair<CScript, int64> >& vecSend,
 
                 if (nChange > 0)
                 {
-                    // Note: We use a new key here to keep it from being obvious which side is the change.
-                    //  The drawback is that by not reusing a previous key, the change may be lost if a
-                    //  backup is restored, if the backup doesn't have the new private key for the change.
-                    //  If we reused the old key, it would be possible to add code to look for and
-                    //  rediscover unknown transactions that were written with keys of ours to recover
-                    //  post-backup change.
-
-                    // Reserve a new key pair from key pool
-                    CPubKey vchPubKey;
-                    assert(reservekey.GetReservedKey(vchPubKey)); // should never fail, as we just unlocked
-
                     // Fill a vout to ourself
                     // TODO: pass in scriptChange instead of reservekey so
                     // change transaction isn't always pay-to-bitcoin-address
                     CScript scriptChange;
-                    scriptChange.SetDestination(vchPubKey.GetID());
+
+                    if (sCoinControlChange.empty()) // send change to newly generated address
+                    {
+                        // Note: We use a new key here to keep it from being obvious which side is the change.
+                        //  The drawback is that by not reusing a previous key, the change may be lost if a
+                        //  backup is restored, if the backup doesn't have the new private key for the change.
+                        //  If we reused the old key, it would be possible to add code to look for and
+                        //  rediscover unknown transactions that were written with keys of ours to recover
+                        //  post-backup change.
+
+                        // Reserve a new key pair from key pool
+                        CPubKey vchPubKey;
+                        assert(reservekey.GetReservedKey(vchPubKey)); // should never fail, as we just unlocked
+
+                        scriptChange.SetDestination(vchPubKey.GetID());
+                    }
+                    else
+                    {
+                        // coin control: send change to custom address (we can assume valid address here)
+                        CBitcoinAddress changeAddress(sCoinControlChange);
+                        scriptChange.SetDestination(changeAddress.Get());
+                    }
 
                     CTxOut newTxOut(nChange, scriptChange);
 
@@ -1248,8 +1272,6 @@ bool CWallet::CreateTransaction(const vector<pair<CScript, int64> >& vecSend,
                         wtxNew.vout.insert(position, newTxOut);
                     }
                 }
-                else
-                    reservekey.ReturnKey();
 
                 // Fill vin
                 BOOST_FOREACH(const PAIRTYPE(const CWalletTx*,unsigned int)& coin, setCoins)
@@ -1877,3 +1899,38 @@ void CWallet::ListLockedCoins(std::vector<COutPoint>& vOutpts)
     }
 }
 
+bool CWallet::CoinControlHasSelected() const
+{
+    return (setCoinControl.size() > 0);
+}
+
+bool CWallet::CoinControlIsSelected(uint256 hash, unsigned int n) const
+{
+    COutPoint outpt(hash, n);
+
+    return (setCoinControl.count(outpt) > 0);
+}
+
+void CWallet::CoinControlSelect(COutPoint& output)
+{
+    setCoinControl.insert(output);
+}
+
+void CWallet::CoinControlUnSelect(COutPoint& output)
+{
+    setCoinControl.erase(output);
+}
+
+void CWallet::CoinControlUnSelectAll()
+{
+     setCoinControl.clear();
+}
+
+void CWallet::CoinControlList(std::vector<COutPoint>& vOutpts)
+{
+    for (std::set<COutPoint>::iterator it = setCoinControl.begin();
+         it != setCoinControl.end(); it++) {
+        COutPoint outpt = (*it);
+        vOutpts.push_back(outpt);
+    }
+}

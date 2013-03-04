@@ -120,6 +120,8 @@ public:
     CPubKey vchDefaultKey;
 
     std::set<COutPoint> setLockedCoins;
+    std::set<COutPoint> setCoinControl;
+    std::string sCoinControlChange;
 
     // check whether we are allowed to upgrade (or already support) to the named feature
     bool CanSupportFeature(enum WalletFeature wf) { return nWalletMaxVersion >= wf; }
@@ -131,6 +133,13 @@ public:
     void UnlockCoin(COutPoint& output);
     void UnlockAllCoins();
     void ListLockedCoins(std::vector<COutPoint>& vOutpts);
+
+    bool CoinControlHasSelected() const;
+    bool CoinControlIsSelected(uint256 hash, unsigned int n) const;
+    void CoinControlSelect(COutPoint& output);
+    void CoinControlUnSelect(COutPoint& output);
+    void CoinControlUnSelectAll();
+    void CoinControlList(std::vector<COutPoint>& vOutpts);
 
     // keystore implementation
     // Generate a new key
