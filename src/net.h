@@ -174,7 +174,10 @@ public:
     // socket
     uint64 nServices;
     SOCKET hSocket;
-    CDataStream vSend;
+    CDataStream ssSend;
+    size_t nSendSize; // total size of all vSendMsg entries
+    size_t nSendOffset; // offset inside the first vSendMsg already sent
+    std::deque<CSerializeData> vSendMsg;
     CCriticalSection cs_vSend;
 
     std::deque<CNetMessage> vRecvMsg;
@@ -185,8 +188,6 @@ public:
     int64 nLastRecv;
     int64 nLastSendEmpty;
     int64 nTimeConnected;
-    int nHeaderStart;
-    unsigned int nMessageStart;
     CAddress addr;
     std::string addrName;
     CService addrLocal;
@@ -234,7 +235,7 @@ public:
     CCriticalSection cs_inventory;
     std::multimap<int64, CInv> mapAskFor;
 
-    CNode(SOCKET hSocketIn, CAddress addrIn, std::string addrNameIn = "", bool fInboundIn=false) : vSend(SER_NETWORK, MIN_PROTO_VERSION)
+    CNode(SOCKET hSocketIn, CAddress addrIn, std::string addrNameIn = "", bool fInboundIn=false) : ssSend(SER_NETWORK, MIN_PROTO_VERSION)
     {
         nServices = 0;
         hSocket = hSocketIn;
@@ -243,8 +244,6 @@ public:
         nLastRecv = 0;
         nLastSendEmpty = GetTime();
         nTimeConnected = GetTime();
-        nHeaderStart = -1;
-        nMessageStart = -1;
         addr = addrIn;
         addrName = addrNameIn == "" ? addr.ToStringIPPort() : addrNameIn;
         nVersion = 0;
@@ -257,6 +256,8 @@ public:
         fDisconnect = false;
         nRefCount = 0;
         nReleaseTime = 0;
+        nSendSize = 0;
+        nSendOffset = 0;
         hashContinue = 0;
         pindexLastGetBlocksBegin = 0;
         hashLastGetBlocksEnd = 0;
@@ -388,11 +389,8 @@ public:
     void BeginMessage(const char* pszCommand) EXCLUSIVE_LOCK_FUNCTION(cs_vSend)
     {
         ENTER_CRITICAL_SECTION(cs_vSend);
-        if (nHeaderStart != -1)
-            AbortMessage();
-        nHeaderStart = vSend.size();
-        vSend << CMessageHeader(pszCommand, 0);
-        nMessageStart = vSend.size();
+        assert(ssSend.size() == 0);
+        ssSend << CMessageHeader(pszCommand, 0);
         if (fDebug)
             printf("sending: %s ", pszCommand);
     }
@@ -400,11 +398,8 @@ public:
     // TODO: Document the precondition of this function.  Is cs_vSend locked?
     void AbortMessage() UNLOCK_FUNCTION(cs_vSend)
     {
-        if (nHeaderStart < 0)
-            return;
-        vSend.resize(nHeaderStart);
-        nHeaderStart = -1;
-        nMessageStart = -1;
+        ssSend.clear();
+
         LEAVE_CRITICAL_SECTION(cs_vSend);
 
         if (fDebug)
@@ -421,30 +416,32 @@ public:
             return;
         }
 
-        if (nHeaderStart < 0)
+        if (ssSend.size() == 0)
             return;
 
         // Set the size
-        unsigned int nSize = vSend.size() - nMessageStart;
-        memcpy((char*)&vSend[nHeaderStart] + CMessageHeader::MESSAGE_SIZE_OFFSET, &nSize, sizeof(nSize));
+        unsigned int nSize = ssSend.size() - CMessageHeader::HEADER_SIZE;
+        memcpy((char*)&ssSend[CMessageHeader::MESSAGE_SIZE_OFFSET], &nSize, sizeof(nSize));
 
         // Set the checksum
-        uint256 hash = Hash(vSend.begin() + nMessageStart, vSend.end());
+        uint256 hash = Hash(ssSend.begin() + CMessageHeader::HEADER_SIZE, ssSend.end());
         unsigned int nChecksum = 0;
         memcpy(&nChecksum, &hash, sizeof(nChecksum));
-        assert(nMessageStart - nHeaderStart >= CMessageHeader::CHECKSUM_OFFSET + sizeof(nChecksum));
-        memcpy((char*)&vSend[nHeaderStart] + CMessageHeader::CHECKSUM_OFFSET, &nChecksum, sizeof(nChecksum));
+        assert(ssSend.size () >= CMessageHeader::CHECKSUM_OFFSET + sizeof(nChecksum));
+        memcpy((char*)&ssSend[CMessageHeader::CHECKSUM_OFFSET], &nChecksum, sizeof(nChecksum));
 
         if (fDebug) {
             printf("(%d bytes)\n", nSize);
         }
 
+        std::deque<CSerializeData>::iterator it = vSendMsg.insert(vSendMsg.end(), CSerializeData());
+        ssSend.GetAndClear(*it);
+        nSendSize += (*it).size();
+
         // If write queue empty, attempt "optimistic write"
-        if (nHeaderStart == 0)
+        if (it == vSendMsg.begin())
             SocketSendData(this);
 
-        nHeaderStart = -1;
-        nMessageStart = -1;
         LEAVE_CRITICAL_SECTION(cs_vSend);
     }
 
@@ -471,7 +468,7 @@ public:
         try
         {
             BeginMessage(pszCommand);
-            vSend << a1;
+            ssSend << a1;
             EndMessage();
         }
         catch (...)
@@ -487,7 +484,7 @@ public:
         try
         {
             BeginMessage(pszCommand);
-            vSend << a1 << a2;
+            ssSend << a1 << a2;
             EndMessage();
         }
         catch (...)
@@ -503,7 +500,7 @@ public:
         try
         {
             BeginMessage(pszCommand);
-            vSend << a1 << a2 << a3;
+            ssSend << a1 << a2 << a3;
             EndMessage();
         }
         catch (...)
@@ -519,7 +516,7 @@ public:
         try
         {
             BeginMessage(pszCommand);
-            vSend << a1 << a2 << a3 << a4;
+            ssSend << a1 << a2 << a3 << a4;
             EndMessage();
         }
         catch (...)
@@ -535,7 +532,7 @@ public:
         try
         {
             BeginMessage(pszCommand);
-            vSend << a1 << a2 << a3 << a4 << a5;
+            ssSend << a1 << a2 << a3 << a4 << a5;
             EndMessage();
         }
         catch (...)
@@ -551,7 +548,7 @@ public:
         try
         {
             BeginMessage(pszCommand);
-            vSend << a1 << a2 << a3 << a4 << a5 << a6;
+            ssSend << a1 << a2 << a3 << a4 << a5 << a6;
             EndMessage();
         }
         catch (...)
@@ -567,7 +564,7 @@ public:
         try
         {
             BeginMessage(pszCommand);
-            vSend << a1 << a2 << a3 << a4 << a5 << a6 << a7;
+            ssSend << a1 << a2 << a3 << a4 << a5 << a6 << a7;
             EndMessage();
         }
         catch (...)
@@ -583,7 +580,7 @@ public:
         try
         {
             BeginMessage(pszCommand);
-            vSend << a1 << a2 << a3 << a4 << a5 << a6 << a7 << a8;
+            ssSend << a1 << a2 << a3 << a4 << a5 << a6 << a7 << a8;
             EndMessage();
         }
         catch (...)
@@ -599,7 +596,7 @@ public:
         try
         {
             BeginMessage(pszCommand);
-            vSend << a1 << a2 << a3 << a4 << a5 << a6 << a7 << a8 << a9;
+            ssSend << a1 << a2 << a3 << a4 << a5 << a6 << a7 << a8 << a9;
             EndMessage();
         }
         catch (...)
