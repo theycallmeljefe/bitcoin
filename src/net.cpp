@@ -63,7 +63,10 @@ CCriticalSection cs_vNodes;
 map<CInv, CDataStream> mapRelay;
 deque<pair<int64, CInv> > vRelayExpiration;
 CCriticalSection cs_mapRelay;
-map<CInv, int64> mapAlreadyAskedFor;
+// This should be an upper bound for the number of invs we will see in 2 minutes
+// We (arbitrarily) chose 16,000 which is roughly a block's worth of small transactions
+// every 30 seconds.
+limitedmap<CInv, int64> mapAlreadyAskedFor(16000);
 
 static deque<string> vOneShots;
 CCriticalSection cs_vOneShots;
