@@ -106,6 +106,7 @@ void Shutdown(void* parg)
         delete pwalletMain;
         NewThread(ExitTimeout, NULL);
         Sleep(50);
+        printf("Node objects left: %i\n", nNodes);
         printf("Bitcoin exited\n\n");
         fExit = true;
 #ifndef QT_GUI

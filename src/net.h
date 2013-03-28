@@ -36,7 +36,7 @@ bool GetMyExternalIP(CNetAddr& ipRet);
 void AddressCurrentlyConnected(const CService& addr);
 CNode* FindNode(const CNetAddr& ip);
 CNode* FindNode(const CService& ip);
-CNode* ConnectNode(CAddress addrConnect, const char *strDest = NULL, int64 nTimeout=0);
+CNode* ConnectNode(CAddress addrConnect, const char *strDest = NULL);
 void MapPort();
 unsigned short GetListenPort();
 bool BindListenPort(const CService &bindAddr, std::string& strError=REF(std::string()));
@@ -120,7 +120,6 @@ public:
     int nVersion;
     std::string strSubVer;
     bool fInbound;
-    int64 nReleaseTime;
     int nStartingHeight;
     int nMisbehavior;
 };
@@ -165,7 +164,8 @@ public:
 
 
 
-
+extern int nNodes;
+extern CCriticalSection cs_nNodes;
 
 /** Information about a peer */
 class CNode
@@ -207,8 +207,8 @@ public:
     CSemaphoreGrant grantOutbound;
     CCriticalSection cs_filter;
     CBloomFilter* pfilter;
-protected:
     int nRefCount;
+protected:
 
     // Denial-of-service detection/prevention
     // Key is IP address, value is banned-until-time
@@ -217,7 +217,6 @@ protected:
     int nMisbehavior;
 
 public:
-    int64 nReleaseTime;
     uint256 hashContinue;
     CBlockIndex* pindexLastGetBlocksBegin;
     uint256 hashLastGetBlocksEnd;
@@ -237,6 +236,11 @@ public:
 
     CNode(SOCKET hSocketIn, CAddress addrIn, std::string addrNameIn = "", bool fInboundIn=false) : ssSend(SER_NETWORK, MIN_PROTO_VERSION)
     {
+        {
+            LOCK(cs_nNodes);
+            nNodes++;
+        }
+
         nServices = 0;
         hSocket = hSocketIn;
         nRecvVersion = MIN_PROTO_VERSION;
@@ -255,7 +259,6 @@ public:
         fSuccessfullyConnected = false;
         fDisconnect = false;
         nRefCount = 0;
-        nReleaseTime = 0;
         nSendSize = 0;
         nSendOffset = 0;
         hashContinue = 0;
@@ -275,6 +278,11 @@ public:
 
     ~CNode()
     {
+        {
+            LOCK(cs_nNodes);
+            nNodes--;
+        }
+
         if (hSocket != INVALID_SOCKET)
         {
             closesocket(hSocket);
@@ -292,7 +300,8 @@ public:
 
     int GetRefCount()
     {
-        return std::max(nRefCount, 0) + (GetTime() < nReleaseTime ? 1 : 0);
+        assert(nRefCount >= 0);
+        return nRefCount;
     }
 
     // requires LOCK(cs_vRecvMsg)
@@ -315,12 +324,9 @@ public:
             msg.SetVersion(nVersionIn);
     }
 
-    CNode* AddRef(int64 nTimeout=0)
+    CNode* AddRef()
     {
-        if (nTimeout != 0)
-            nReleaseTime = std::max(nReleaseTime, GetTime() + nTimeout);
-        else
-            nRefCount++;
+        nRefCount++;
         return this;
     }
 
