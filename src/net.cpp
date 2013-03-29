@@ -627,8 +627,21 @@ void CNode::copyStats(CNodeStats &stats)
     X(fInbound);
     X(nStartingHeight);
     X(nMisbehavior);
-}
 #undef X
+    stats.nMemSendBuffer = ssSend.usage() - sizeof(ssSend);
+    BOOST_FOREACH(const CSerializeData &msg, vSendMsg)
+        stats.nMemSendBuffer += msg.capacity() + 8 + sizeof(CSerializeData);
+    stats.nMemRecvBuffer = 0;
+    BOOST_FOREACH(const CNetMessage &msg, vRecvMsg)
+        stats.nMemRecvBuffer += msg.usage();
+    stats.nMemBloomFilter = pfilter ? 8 + pfilter->usage() : 0;
+    stats.nMemAddrSend = vAddrToSend.capacity() * sizeof(CAddress) + 8;
+    stats.nMemAddrKnown = setAddrKnown.size() * (3*sizeof(void*) + 4 + 8 + sizeof(CAddress));
+    stats.nMemKnown = setKnown.size() * (3*sizeof(void*) + 4 + 8 + sizeof(uint256));
+    stats.nMemInvKnown = setInventoryKnown.usage() - sizeof(setInventoryKnown);
+    stats.nMemInvToSend = vInventoryToSend.capacity() * sizeof(CInv) + 8;
+    stats.nMemAskFor = mapAskFor.size() * (3*sizeof(void*) + 4 + 8 + sizeof(int64) + sizeof(CInv));
+}
 
 // requires LOCK(cs_vRecvMsg)
 bool CNode::ReceiveMsgBytes(const char *pch, unsigned int nBytes)

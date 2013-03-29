@@ -122,6 +122,15 @@ public:
     bool fInbound;
     int nStartingHeight;
     int nMisbehavior;
+    int64 nMemSendBuffer;
+    int64 nMemRecvBuffer;
+    int64 nMemBloomFilter;
+    int64 nMemAddrSend;
+    int64 nMemAddrKnown;
+    int64 nMemKnown;
+    int64 nMemInvKnown;
+    int64 nMemInvToSend;
+    int64 nMemAskFor;
 };
 
 
@@ -143,6 +152,11 @@ public:
         in_data = false;
         nHdrPos = 0;
         nDataPos = 0;
+    }
+
+    size_t usage() const
+    {
+        return sizeof(*this) + vRecv.usage() + 8 + hdrbuf.usage() - sizeof(hdrbuf) - sizeof(vRecv);
     }
 
     bool complete() const

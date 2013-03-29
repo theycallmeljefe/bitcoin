@@ -61,6 +61,11 @@ public:
     // Should only be used for deserialization
     CBloomFilter() {}
 
+    size_t usage() const
+    {
+        return sizeof(*this) + 8 + vData.capacity();
+    }
+
     IMPLEMENT_SERIALIZE
     (
         READWRITE(vData);

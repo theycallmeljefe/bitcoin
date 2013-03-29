@@ -58,6 +58,16 @@ Value getpeerinfo(const Array& params, bool fHelp)
         obj.push_back(Pair("startingheight", stats.nStartingHeight));
         obj.push_back(Pair("banscore", stats.nMisbehavior));
 
+        obj.push_back(Pair("memsendbuffer", (boost::int64_t)stats.nMemSendBuffer));
+        obj.push_back(Pair("memrecvbuffer", (boost::int64_t)stats.nMemRecvBuffer));
+        obj.push_back(Pair("membloomfilter", (boost::int64_t)stats.nMemBloomFilter));
+        obj.push_back(Pair("memaddrsend", (boost::int64_t)stats.nMemAddrSend));
+        obj.push_back(Pair("memaddrknown", (boost::int64_t)stats.nMemAddrKnown));
+        obj.push_back(Pair("memknown", (boost::int64_t)stats.nMemKnown));
+        obj.push_back(Pair("meminvknown", (boost::int64_t)stats.nMemInvKnown));
+        obj.push_back(Pair("memaskfor", (boost::int64_t)stats.nMemAskFor));
+        obj.push_back(Pair("memtotal", (boost::int64_t)(stats.nMemSendBuffer + stats.nMemRecvBuffer + stats.nMemBloomFilter + stats.nMemAddrSend + stats.nMemAddrKnown + stats.nMemKnown + stats.nMemInvKnown + stats.nMemAskFor + sizeof(stats))));
+
         ret.push_back(obj);
     }
 
