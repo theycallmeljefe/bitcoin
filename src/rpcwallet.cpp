@@ -1259,20 +1259,14 @@ Value keypoolrefill(const Array& params, bool fHelp)
 }
 
 
-void ThreadTopUpKeyPool(void* parg)
+void ThreadTopUpKeyPool()
 {
-    // Make this thread recognisable as the key-topping-up thread
-    RenameThread("bitcoin-key-top");
-
     pwalletMain->TopUpKeyPool();
 }
 
-void ThreadCleanWalletPassphrase(void* parg)
+void ThreadCleanWalletPassphrase(int64 nSleepTime)
 {
-    // Make this thread recognisable as the wallet relocking thread
-    RenameThread("bitcoin-lock-wa");
-
-    int64 nMyWakeTime = GetTimeMillis() + *((int64*)parg) * 1000;
+    int64 nMyWakeTime = GetTimeMillis() + nSleepTime * 1000;
 
     ENTER_CRITICAL_SECTION(cs_nWalletUnlockTime);
 
@@ -1307,8 +1301,6 @@ void ThreadCleanWalletPassphrase(void* parg)
     }
 
     LEAVE_CRITICAL_SECTION(cs_nWalletUnlockTime);
-
-    delete (int64*)parg;
 }
 
 Value walletpassphrase(const Array& params, bool fHelp)
@@ -1342,9 +1334,10 @@ Value walletpassphrase(const Array& params, bool fHelp)
             "walletpassphrase <passphrase> <timeout>\n"
             "Stores the wallet decryption key in memory for <timeout> seconds.");
 
-    NewThread(ThreadTopUpKeyPool, NULL);
-    int64* pnSleepTime = new int64(params[1].get_int64());
-    NewThread(ThreadCleanWalletPassphrase, pnSleepTime);
+    boost::thread(boost::bind(&TraceThread<void (*)()>, "key-top", &ThreadTopUpKeyPool));
+    int64 nSleepTime = params[1].get_int64();
+    boost::function<void()> f = boost::bind(&ThreadCleanWalletPassphrase, nSleepTime);
+    boost::thread(boost::bind(&TraceThread<boost::function<void()> >, "lock-wa", f));
 
     return Value::null;
 }
