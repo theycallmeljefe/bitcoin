@@ -1585,6 +1585,27 @@ bool FindUndoPos(CValidationState &state, int nFile, CDiskBlockPos &pos, unsigne
 
 static CCheckQueue<CScriptCheck> scriptcheckqueue(128);
 
+static int64 CalcBlockUTXOInOutSize(CCoinsViewCache &view, const CBlock &block) {
+    std::set<uint256> setHash;
+    for (unsigned int i=0; i<block.vtx.size(); i++) {
+        if (i>0) {
+            BOOST_FOREACH(const CTxIn &txin, block.vtx[i].vin) {
+                setHash.insert(txin.prevout.hash);
+            }
+        }
+        setHash.insert(block.GetTxHash(i));
+    }
+    int64 nSize = 0;
+    BOOST_FOREACH(const uint256 &hash, setHash) {
+        if (view.HaveCoins(hash)) {
+            const CCoins &coin = view.GetCoins(hash);
+            if (!coin.IsPruned())
+                nSize += 32 + ::GetSerializeSize(coin, SER_DISK, CLIENT_VERSION);
+        }
+    }
+    return nSize;
+}
+
 void ThreadScriptCheck() {
     RenameThread("bitcoin-scriptch");
     scriptcheckqueue.Thread();
@@ -1643,9 +1664,11 @@ bool CBlock::ConnectBlock(CValidationState &state, CBlockIndex* pindex, CCoinsVi
 
     CCheckQueueControl<CScriptCheck> control(fScriptChecks && nScriptCheckThreads ? &scriptcheckqueue : NULL);
 
+    int nPreSize = CalcBlockUTXOInOutSize(view, *this);
     int64 nStart = GetTimeMicros();
     int64 nFees = 0;
     int nInputs = 0;
+    int nOutputs = 0;
     unsigned int nSigOps = 0;
     CDiskTxPos pos(pindex->GetBlockPos(), GetSizeOfCompactSize(vtx.size()));
     std::vector<std::pair<uint256, CDiskTxPos> > vPos;
@@ -1654,7 +1677,10 @@ bool CBlock::ConnectBlock(CValidationState &state, CBlockIndex* pindex, CCoinsVi
     {
         const CTransaction &tx = vtx[i];
 
-        nInputs += tx.vin.size();
+        if (i != 0)
+            nInputs += tx.vin.size();
+        nOutputs += tx.vout.size();
+
         nSigOps += tx.GetLegacySigOpCount();
         if (nSigOps > MAX_BLOCK_SIGOPS)
             return state.DoS(100, error("ConnectBlock() : too many sigops"));
@@ -1698,6 +1724,12 @@ bool CBlock::ConnectBlock(CValidationState &state, CBlockIndex* pindex, CCoinsVi
     if (vtx[0].GetValueOut() > GetBlockValue(pindex->nHeight, nFees))
         return state.DoS(100, error("ConnectBlock() : coinbase pays too much (actual=%"PRI64d" vs limit=%"PRI64d")", vtx[0].GetValueOut(), GetBlockValue(pindex->nHeight, nFees)));
 
+    int nPostSize = CalcBlockUTXOInOutSize(view, *this);
+    int nAddSize = 0;
+        for (unsigned int i=0; i<vtx.size(); i++) {
+        nAddSize += 32 + ::GetSerializeSize(CCoins(vtx[i], pindex->nHeight), SER_DISK, CLIENT_VERSION);
+    }
+
     if (!control.Wait())
         return state.DoS(100, false);
     int64 nTime2 = GetTimeMicros() - nStart;
@@ -1706,6 +1738,13 @@ bool CBlock::ConnectBlock(CValidationState &state, CBlockIndex* pindex, CCoinsVi
 
     if (fJustCheck)
         return true;
+
+    // Update statistics
+    pindex->nSizeOutputsTotal = pindex->pprev->nSizeOutputsTotal + nAddSize;
+    pindex->nSizeOutputsPruned = pindex->pprev->nSizeOutputsPruned + nPostSize - nPreSize;
+    pindex->nNumOutputsTotal = pindex->pprev->nNumOutputsTotal + nOutputs;
+    pindex->nNumOutputsPruned = pindex->pprev->nNumOutputsPruned + nOutputs - nInputs;
+    printf("STATS %i %i %i %i %i %i\n", pindex->nHeight, pindex->nTime, pindex->nNumOutputsPruned, pindex->nNumOutputsTotal, pindex->nSizeOutputsPruned, pindex->nSizeOutputsTotal);
 
     // Write undo information to disk
     if (pindex->GetUndoPos().IsNull() || (pindex->nStatus & BLOCK_VALID_MASK) < BLOCK_VALID_SCRIPTS)

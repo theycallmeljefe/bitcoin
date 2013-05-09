@@ -1638,6 +1638,11 @@ public:
     unsigned int nBits;
     unsigned int nNonce;
 
+    // Pruning statistics
+    unsigned int nSizeOutputsTotal;
+    unsigned int nSizeOutputsPruned;
+    unsigned int nNumOutputsTotal;
+    unsigned int nNumOutputsPruned;
 
     CBlockIndex()
     {
@@ -1658,6 +1663,11 @@ public:
         nTime          = 0;
         nBits          = 0;
         nNonce         = 0;
+
+        nSizeOutputsTotal = 0;
+        nSizeOutputsPruned = 0;
+        nNumOutputsTotal = 0;
+        nNumOutputsPruned = 0;
     }
 
     CBlockIndex(CBlockHeader& block)
