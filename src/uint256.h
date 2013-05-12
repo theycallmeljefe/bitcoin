@@ -31,6 +31,10 @@ protected:
     uint32_t pn[WIDTH];
 public:
 
+    size_t GetDataSize() const {
+        return WIDTH*4;
+    }
+
     bool operator!() const
     {
         for (int i = 0; i < WIDTH; i++)

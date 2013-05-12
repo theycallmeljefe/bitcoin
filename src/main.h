@@ -10,6 +10,8 @@
 #include "net.h"
 #include "script.h"
 
+#include "datasize.h"
+
 #include <list>
 
 class CWallet;
@@ -254,6 +256,7 @@ public:
     CTransaction* ptx;
     unsigned int n;
 
+    size_t GetDataSize() const { return sizeof(*this); }
     CInPoint() { SetNull(); }
     CInPoint(CTransaction* ptxIn, unsigned int nIn) { ptx = ptxIn; n = nIn; }
     void SetNull() { ptx = NULL; n = (unsigned int) -1; }
@@ -269,6 +272,7 @@ public:
     uint256 hash;
     unsigned int n;
 
+    size_t GetDataSize() const { return sizeof(*this); }
     COutPoint() { SetNull(); }
     COutPoint(uint256 hashIn, unsigned int nIn) { hash = hashIn; n = nIn; }
     IMPLEMENT_SERIALIZE( READWRITE(FLATDATA(*this)); )
@@ -314,6 +318,10 @@ public:
     COutPoint prevout;
     CScript scriptSig;
     unsigned int nSequence;
+
+    size_t GetDataSize() const {
+        return sizeof(prevout) + ::DataSize(scriptSig) + sizeof(nSequence);
+    }
 
     CTxIn()
     {
@@ -390,6 +398,10 @@ class CTxOut
 public:
     int64 nValue;
     CScript scriptPubKey;
+
+    size_t GetDataSize() const {
+        return sizeof(nValue) + ::DataSize(scriptPubKey);
+    }
 
     CTxOut()
     {
@@ -472,6 +484,10 @@ public:
     std::vector<CTxIn> vin;
     std::vector<CTxOut> vout;
     unsigned int nLockTime;
+
+    size_t GetDataSize() const {
+        return sizeof(nVersion) + ::DataSize(vin) + ::DataSize(vout) + sizeof(nLockTime);
+    }
 
     CTransaction()
     {
@@ -894,6 +910,10 @@ public:
 
     // empty constructor
     CCoins() : fCoinBase(false), vout(0), nHeight(0), nVersion(0) { }
+
+    size_t GetDataSize() const {
+        return sizeof(fCoinBase) + ::DataSize(vout) + sizeof(nHeight) + sizeof(nVersion);
+    }
 
     // remove spent outputs at the end of vout
     void Cleanup() {
@@ -1320,6 +1340,10 @@ public:
     // memory only
     mutable std::vector<uint256> vMerkleTree;
 
+    size_t GetDataSize() {
+        return ::DataSize(vtx) + ::DataSize(vMerkleTree);
+    }
+
     CBlock()
     {
         SetNull();
@@ -1643,6 +1667,10 @@ public:
     unsigned int nSizeOutputsPruned;
     unsigned int nNumOutputsTotal;
     unsigned int nNumOutputsPruned;
+
+    size_t GetDataSize() const {
+        return sizeof(*this);
+    }
 
     CBlockIndex()
     {
@@ -2083,6 +2111,10 @@ public:
     void clear();
     void queryHashes(std::vector<uint256>& vtxid);
     void pruneSpent(const uint256& hash, CCoins &coins);
+
+    size_t GetDataSize() const {
+        return sizeof(cs) + ::DataSize(mapTx) + ::DataSize(mapNextTx);
+    }
 
     unsigned long size()
     {

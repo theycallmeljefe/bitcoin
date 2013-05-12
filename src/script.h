@@ -13,6 +13,7 @@
 
 #include "keystore.h"
 #include "bignum.h"
+#include "datasize.h"
 
 class CCoins;
 class CTransaction;
@@ -293,6 +294,7 @@ public:
         return ret;
     }
 
+    size_t GetDataSize() const { return ::DataSize(*(std::vector<unsigned char>*)this); }
 
     //explicit CScript(char b) is not portable.  Use 'signed char' or 'unsigned char'.
     explicit CScript(signed char b)    { operator<<(b); }
