@@ -796,6 +796,7 @@ void ThreadSocketHandler()
                     }
                     if (fDelete)
                     {
+                        g_signals.FinalizeNode(pnode);
                         vNodesDisconnected.remove(pnode);
                         delete pnode;
                     }

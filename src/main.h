@@ -54,6 +54,11 @@ static const unsigned int LOCKTIME_THRESHOLD = 500000000; // Tue Nov  5 00:53:20
 static const int MAX_SCRIPTCHECK_THREADS = 16;
 /** Default amount of block size reserved for high-priority transactions (in bytes) */
 static const int DEFAULT_BLOCK_PRIORITY_SIZE = 27000;
+/** Number of blocks that can be requested at any given time. */
+static const int MAX_BLOCKS_IN_TRANSIT = 1008;
+/** Number of blocks that can be requested at any given time. */
+static const int MAX_BLOCKS_IN_TRANSIT_PER_PEER = 32;
+
 #ifdef USE_UPNP
 static const int fHaveUPnP = true;
 #else
@@ -78,6 +83,7 @@ extern uint256 nBestChainWork;
 extern uint256 nBestInvalidWork;
 extern uint256 hashBestChain;
 extern CBlockIndex* pindexBest;
+extern CBlockIndex* pindexBestHeader;
 extern unsigned int nTransactionsUpdated;
 extern uint64 nLastBlockTx;
 extern uint64 nLastBlockSize;
@@ -129,8 +135,8 @@ void RegisterNodeSignals(CNodeSignals& nodeSignals);
 /** Unregister a network node */
 void UnregisterNodeSignals(CNodeSignals& nodeSignals);
 
-void PushGetBlocks(CNode* pnode, CBlockIndex* pindexBegin, uint256 hashEnd);
-
+/** Process an incoming block header */
+bool ProcessBlockHeader(CValidationState &state, const CBlockHeader* pheader);
 /** Process an incoming block */
 bool ProcessBlock(CValidationState &state, CNode* pfrom, CBlock* pblock, CDiskBlockPos *dbp = NULL);
 /** Check whether enough disk space is available for an incoming block */
@@ -163,8 +169,6 @@ void ThreadScriptCheck();
 bool CheckProofOfWork(uint256 hash, unsigned int nBits);
 /** Calculate the minimum amount of work a received block needs, without knowing its direct parent */
 unsigned int ComputeMinWork(unsigned int nBase, int64 nTime);
-/** Get the number of active peers */
-int GetNumBlocksOfPeers();
 /** Check whether we are doing an initial block download (synchronizing from disk or network) */
 bool IsInitialBlockDownload();
 /** Format a string that describes several potential problems detected by the core */
@@ -172,9 +176,9 @@ std::string GetWarnings(std::string strFor);
 /** Retrieve a transaction (from memory pool, or from disk, if possible) */
 bool GetTransaction(const uint256 &hash, CTransaction &tx, uint256 &hashBlock, bool fAllowSlow = false);
 /** Connect/disconnect blocks until pindexNew is the new tip of the active block chain */
-bool SetBestChain(CValidationState &state, CBlockIndex* pindexNew);
+bool SwitchToBestHeader(CValidationState &state);
 /** Find the best known block, and make it the tip of the block chain */
-bool ConnectBestBlock(CValidationState &state);
+bool SwitchToBestBlock(CValidationState &state);
 int64 GetBlockValue(int nHeight, int64 nFees);
 unsigned int GetNextWorkRequired(const CBlockIndex* pindexLast, const CBlockHeader *pblock);
 
@@ -599,10 +603,12 @@ bool ConnectBlock(CBlock& block, CValidationState& state, CBlockIndex* pindex, C
 bool AddToBlockIndex(CBlock& block, CValidationState& state, const CDiskBlockPos& pos);
 
 // Context-independent validity checks
+bool CheckBlockHeader(const CBlockHeader& header, CValidationState& state, bool fCheckPOW = true);
 bool CheckBlock(const CBlock& block, CValidationState& state, bool fCheckPOW = true, bool fCheckMerkleRoot = true);
 
 // Store block on disk
 // if dbp is provided, the file is known to already reside on disk
+bool AcceptBlockHeader(const CBlockHeader& header, CValidationState& state, CBlockIndex* &pindexNew);
 bool AcceptBlock(CBlock& block, CValidationState& state, CDiskBlockPos* dbp = NULL);
 
 
@@ -749,7 +755,7 @@ public:
         nNonce         = 0;
     }
 
-    CBlockIndex(CBlockHeader& block)
+    CBlockIndex(const CBlockHeader& block)
     {
         phashBlock = NULL;
         pprev = NULL;
@@ -1083,8 +1089,8 @@ public:
     std::map<uint256, CTransaction> mapTx;
     std::map<COutPoint, CInPoint> mapNextTx;
 
-    bool accept(CValidationState &state, CTransaction &tx, bool fLimitFree, bool* pfMissingInputs);
-    bool addUnchecked(const uint256& hash, CTransaction &tx);
+    bool accept(CValidationState &state, const CTransaction &tx, bool fLimitFree, bool* pfMissingInputs);
+    bool addUnchecked(const uint256& hash, const CTransaction &tx);
     bool remove(const CTransaction &tx, bool fRecursive = false);
     bool removeConflicts(const CTransaction &tx);
     void clear();

@@ -172,6 +172,9 @@ Value getblock(const Array& params, bool fHelp)
 
     CBlock block;
     CBlockIndex* pblockindex = mapBlockIndex[hash];
+    if (!(pblockindex->nStatus & BLOCK_HAVE_DATA))
+        throw JSONRPCError(RPC_INVALID_PARAMETER, "Block data not available");
+
     ReadBlockFromDisk(block, pblockindex);
 
     if (!fVerbose)

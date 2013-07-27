@@ -54,6 +54,7 @@ struct CNodeSignals
 {
     boost::signals2::signal<bool (CNode*)> ProcessMessages;
     boost::signals2::signal<bool (CNode*, bool)> SendMessages;
+    boost::signals2::signal<void (CNode*)> FinalizeNode;
 };
 
 CNodeSignals& GetNodeSignals();
@@ -99,8 +100,6 @@ extern limitedmap<CInv, int64> mapAlreadyAskedFor;
 
 extern std::vector<std::string> vAddedNodes;
 extern CCriticalSection cs_vAddedNodes;
-
-
 
 
 class CNodeStats
@@ -217,10 +216,11 @@ protected:
 
 public:
     uint256 hashContinue;
-    CBlockIndex* pindexLastGetBlocksBegin;
-    uint256 hashLastGetBlocksEnd;
     int nStartingHeight;
     bool fStartSync;
+    uint256 hashLastBlock;        // Last block we don't know ourself, that we've seen this peer announce.
+    CBlockIndex *pindexLastBlock; // Best block we've seen this peer announce.
+    std::set<CBlockIndex*> setBlocksAskedFor;
 
     // flood relay
     std::vector<CAddress> vAddrToSend;
@@ -259,9 +259,9 @@ public:
         nSendSize = 0;
         nSendOffset = 0;
         hashContinue = 0;
-        pindexLastGetBlocksBegin = 0;
-        hashLastGetBlocksEnd = 0;
         nStartingHeight = -1;
+        hashLastBlock = 0;
+        pindexLastBlock = NULL;
         fStartSync = false;
         fGetAddr = false;
         nMisbehavior = 0;

@@ -117,6 +117,18 @@ namespace Checkpoints
         return fWorkBefore / (fWorkBefore + fWorkAfter);
     }
 
+    int GetLastCheckpointHeight(int nHeight)
+    {
+        if (!fEnabled)
+            return 0;
+
+        MapCheckpoints::const_iterator it = Checkpoints().mapCheckpoints->upper_bound(nHeight);
+        if (it == Checkpoints().mapCheckpoints->begin())
+            return 0;
+        it--;
+        return it->first;
+    }
+
     int GetTotalBlocksEstimate()
     {
         if (!fEnabled)
@@ -125,22 +137,5 @@ namespace Checkpoints
         const MapCheckpoints& checkpoints = *Checkpoints().mapCheckpoints;
 
         return checkpoints.rbegin()->first;
-    }
-
-    CBlockIndex* GetLastCheckpoint(const std::map<uint256, CBlockIndex*>& mapBlockIndex)
-    {
-        if (!fEnabled)
-            return NULL;
-
-        const MapCheckpoints& checkpoints = *Checkpoints().mapCheckpoints;
-
-        BOOST_REVERSE_FOREACH(const MapCheckpoints::value_type& i, checkpoints)
-        {
-            const uint256& hash = i.second;
-            std::map<uint256, CBlockIndex*>::const_iterator t = mapBlockIndex.find(hash);
-            if (t != mapBlockIndex.end())
-                return t->second;
-        }
-        return NULL;
     }
 }
