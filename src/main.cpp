@@ -10,14 +10,12 @@
 #include "chainparams.h"
 #include "checkpoints.h"
 #include "checkqueue.h"
-#include "db.h"
 #include "init.h"
 #include "net.h"
 #include "txdb.h"
 #include "txmempool.h"
 #include "ui_interface.h"
 #include "util.h"
-#include "wallet.h"
 
 #include <inttypes.h>
 #include <stdint.h>
@@ -32,9 +30,6 @@ using namespace boost;
 //
 // Global state
 //
-
-CCriticalSection cs_setpwalletRegistered;
-set<CWallet*> setpwalletRegistered;
 
 CCriticalSection cs_main;
 

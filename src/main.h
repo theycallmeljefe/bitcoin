@@ -28,15 +28,9 @@
 #include <utility>
 #include <vector>
 
-class CBlock;
 class CBlockIndex;
 class CBloomFilter;
 class CInv;
-class CKeyItem;
-class CNode;
-class CNodeSignals;
-class CReserveKey;
-class CWallet;
 
 /** The maximum allowed size for a serialized block, in bytes (network rule) */
 static const unsigned int MAX_BLOCK_SIZE = 1000000;
@@ -103,11 +97,9 @@ extern int64_t nTransactionFee;
 static const uint64_t nMinDiskSpace = 52428800;
 
 
-class CReserveKey;
 class CCoinsDB;
 class CBlockTreeDB;
 struct CDiskBlockPos;
-class CCoins;
 class CTxUndo;
 class CCoinsView;
 class CCoinsViewCache;

@@ -20,6 +20,7 @@ class CBlockLocator;
 class CKeyPool;
 class CMasterKey;
 class CScript;
+class CWallet;
 class CWalletTx;
 class uint160;
 class uint256;

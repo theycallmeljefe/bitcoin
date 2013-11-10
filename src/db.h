@@ -21,12 +21,10 @@ class CAddrMan;
 struct CBlockLocator;
 class CDiskBlockIndex;
 class COutPoint;
-class CWallet;
 
 extern unsigned int nWalletDBUpdated;
 
 void ThreadFlushWalletDB(const std::string& strWalletFile);
-bool BackupWallet(const CWallet& wallet, const std::string& strDest);
 
 
 class CDBEnv
