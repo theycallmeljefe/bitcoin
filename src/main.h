@@ -35,6 +35,8 @@ class CInv;
 
 /** The maximum allowed size for a serialized block, in bytes (network rule) */
 static const unsigned int MAX_BLOCK_SIZE = 1000000;
+/** The minimum possible serialized valid transaction size, in bytes. */
+static const unsigned int MIN_TRANSACTION_SIZE = 60;
 /** Default for -blockmaxsize, maximum size for mined blocks **/
 static const unsigned int DEFAULT_BLOCK_MAX_SIZE = 750000;
 /** Default for -blockprioritysize, maximum space for zero/low-fee transactions **/
@@ -128,7 +130,7 @@ void UnregisterNodeSignals(CNodeSignals& nodeSignals);
 void PushGetBlocks(CNode* pnode, CBlockIndex* pindexBegin, uint256 hashEnd);
 
 /** Process an incoming block */
-bool ProcessBlock(CValidationState &state, CNode* pfrom, CBlock* pblock, CDiskBlockPos *dbp = NULL);
+bool ProcessBlock(CValidationState &state, const NodeId* pfrom, CBlock* pblock, CDiskBlockPos *dbp = NULL);
 /** Check whether enough disk space is available for an incoming block */
 bool CheckDiskSpace(uint64_t nAdditionalBytes = 0);
 /** Open a block file (blk?????.dat) */
@@ -564,6 +566,10 @@ public:
     // extract the matching txid's represented by this partial merkle tree.
     // returns the merkle root, or 0 in case of failure
     uint256 ExtractMatches(std::vector<uint256> &vMatch);
+
+    unsigned int GetTotalTransactions() const {
+        return nTransactions;
+    }
 };
 
 
@@ -589,6 +595,7 @@ bool ConnectBlock(CBlock& block, CValidationState& state, CBlockIndex* pindex, C
 bool AddToBlockIndex(CBlock& block, CValidationState& state, const CDiskBlockPos& pos);
 
 // Context-independent validity checks
+bool CheckBlockHeader(const CBlockHeader& block, CValidationState& state, bool fCheckPOW = true);
 bool CheckBlock(const CBlock& block, CValidationState& state, bool fCheckPOW = true, bool fCheckMerkleRoot = true);
 
 // Store block on disk
@@ -1083,6 +1090,8 @@ public:
     // Note that this will call IsRelevantAndUpdate on the filter for each transaction,
     // thus the filter will likely be modified.
     CMerkleBlock(const CBlock& block, CBloomFilter& filter);
+
+    CMerkleBlock() {}
 
     IMPLEMENT_SERIALIZE
     (

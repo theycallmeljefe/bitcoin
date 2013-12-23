@@ -190,15 +190,25 @@ struct CNodeState {
     std::string name;
     // List of asynchronously-determined block rejections to notify this peer about.
     std::vector<CBlockReject> rejects;
+    std::vector<uint256> vhashOrphans;
+
+    // Partial block reconstruction.
+    vector<uint256> vhashTxReconstruct;
+    CBlock blockReconstruct;
+    int nReconstructTxMissing;
 
     CNodeState() {
         nMisbehavior = 0;
         fShouldBan = false;
+        nReconstructTxMissing = 0;
     }
 };
 
 // Map maintaining per-node state. Requires cs_main.
 map<NodeId, CNodeState> mapNodeState;
+
+// Maps txid to (nodeid -> blockpos) map. Requires cs_main.
+map<uint256, map<NodeId, int> > mapReconstruct;
 
 // Requires cs_main.
 CNodeState *State(NodeId pnode) {
@@ -206,6 +216,77 @@ CNodeState *State(NodeId pnode) {
     if (it == mapNodeState.end())
         return NULL;
     return &it->second;
+}
+
+// Requires cs_main.
+void RemoveReconstructedBlock(NodeId nodeid, CNodeState &state) {
+    if (state.nReconstructTxMissing) {
+        BOOST_FOREACH(const uint256 &hashTx, state.vhashTxReconstruct) {
+            if (hashTx != uint256(0)) {
+                map<uint256, map<NodeId, int> >::iterator it = mapReconstruct.find(hashTx);
+                if (it != mapReconstruct.end())
+                    it->second.erase(nodeid);
+            }
+        }
+    }
+}
+
+// Requires cs_main.
+void ReconstructBlock(const uint256 &hashTx, const CTransaction &tx) {
+    map<uint256, map<NodeId, int> >::iterator it = mapReconstruct.find(hashTx);
+    if (it != mapReconstruct.end()) {
+        for (map<NodeId, int>::iterator it2 = it->second.begin(); it2 != it->second.end(); it2++) {
+            CNodeState &state = *State(it2->first);
+            state.blockReconstruct.vtx[it2->second] = tx;
+            state.vhashTxReconstruct.clear();
+            state.nReconstructTxMissing--;
+            LogPrintf("Reconstructing block %s using tx %s: %i left\n", state.blockReconstruct.GetHash().ToString().c_str(), hashTx.ToString().c_str(), state.nReconstructTxMissing);
+            if (state.nReconstructTxMissing == 0) {
+                CValidationState vstate;
+                ProcessBlock(vstate, &(it2->first), &state.blockReconstruct, NULL);
+                RemoveReconstructedBlock(it2->first, state);
+            }
+        }
+        mapReconstruct.erase(hashTx);
+    }
+}
+
+// Requires cs_main. nodeid must correspond to an existing node.
+void AddReconstructedBlock(NodeId nodeid, const CBlockHeader &header, const vector<uint256> &vhashTx) {
+    CNodeState &state = *State(nodeid);
+    RemoveReconstructedBlock(nodeid, state);
+    state.vhashTxReconstruct = vhashTx;
+    state.blockReconstruct = CBlock(header);
+    state.blockReconstruct.vtx.resize(vhashTx.size());
+    state.nReconstructTxMissing = vhashTx.size();
+
+    for (unsigned int i=0; i<vhashTx.size(); i++) {
+        const uint256 &hashTx = vhashTx[i];
+        mapReconstruct[hashTx][nodeid] = i;
+    }
+
+    // Try to satisfy missing transactions.
+    LOCK(cs_mapRelay);
+    BOOST_FOREACH(const uint256& hashTx, vhashTx) {
+        CTransaction tx;
+        if (mempool.lookup(hashTx, tx)) {
+            // Found missing transaction in the memory pool.
+            ReconstructBlock(hashTx, tx);
+        } else {
+            map<uint256, CTransaction>::iterator it = mapOrphanTransactions.find(hashTx);
+            if (it != mapOrphanTransactions.end()) {
+                // Found missing transaction in the orphan pool.
+                ReconstructBlock(hashTx, it->second);
+            } else {
+                // Found missing transaction in the relay pool.
+                map<CInv, CDataStream>::iterator it = mapRelay.find(CInv(MSG_TX, hashTx));
+                if (it != mapRelay.end()) {
+                    it->second >> tx;
+                    ReconstructBlock(hashTx, tx);
+                }
+            }
+        }
+    }
 }
 
 int GetHeight()
@@ -2103,6 +2184,21 @@ bool FindUndoPos(CValidationState &state, int nFile, CDiskBlockPos &pos, unsigne
 }
 
 
+bool CheckBlockHeader(const CBlockHeader& block, CValidationState& state, bool fCheckPOW)
+{
+    // Check proof of work matches claimed amount
+    if (fCheckPOW && !CheckProofOfWork(block.GetHash(), block.nBits))
+        return state.DoS(50, error("CheckBlock() : proof of work failed"),
+                         REJECT_INVALID, "invalid pow");
+
+    // Check timestamp
+    if (block.GetBlockTime() > GetAdjustedTime() + 2 * 60 * 60)
+        return state.Invalid(error("CheckBlock() : block timestamp too far in the future"),
+                             REJECT_INVALID, "time in future");
+
+    return true;
+}
+
 bool CheckBlock(const CBlock& block, CValidationState& state, bool fCheckPOW, bool fCheckMerkleRoot)
 {
     // These are checks that are independent of context
@@ -2113,15 +2209,8 @@ bool CheckBlock(const CBlock& block, CValidationState& state, bool fCheckPOW, bo
         return state.DoS(100, error("CheckBlock() : size limits failed"),
                          REJECT_INVALID, "block size too large");
 
-    // Check proof of work matches claimed amount
-    if (fCheckPOW && !CheckProofOfWork(block.GetHash(), block.nBits))
-        return state.DoS(50, error("CheckBlock() : proof of work failed"),
-                         REJECT_INVALID, "invalid pow");
-
-    // Check timestamp
-    if (block.GetBlockTime() > GetAdjustedTime() + 2 * 60 * 60)
-        return state.Invalid(error("CheckBlock() : block timestamp too far in the future"),
-                             REJECT_INVALID, "time in future");
+    if (!CheckBlockHeader(block, state, fCheckPOW))
+        return false;
 
     // First transaction must be coinbase, the rest must not be
     if (block.vtx.empty() || !block.vtx[0].IsCoinBase())
@@ -2298,23 +2387,19 @@ void PushGetBlocks(CNode* pnode, CBlockIndex* pindexBegin, uint256 hashEnd)
     pnode->PushMessage("getblocks", chainActive.GetLocator(pindexBegin), hashEnd);
 }
 
-bool ProcessBlock(CValidationState &state, CNode* pfrom, CBlock* pblock, CDiskBlockPos *dbp)
+bool ProcessBlockHeader(CValidationState &state, const CBlockHeader* pblock)
 {
     AssertLockHeld("cs_main");
 
     // Check for duplicate
     uint256 hash = pblock->GetHash();
     if (mapBlockIndex.count(hash))
-        return state.Invalid(error("ProcessBlock() : already have block %d %s", mapBlockIndex[hash]->nHeight, hash.ToString().c_str()));
+        return state.Invalid(error("ProcessPartialBlock() : already have block %d %s", mapBlockIndex[hash]->nHeight, hash.ToString().c_str()));
     if (mapOrphanBlocks.count(hash))
         return state.Invalid(error("ProcessBlock() : already have block (orphan) %s", hash.ToString().c_str()));
 
-    // Preliminary checks
-    if (!CheckBlock(*pblock, state)) {
-        if (state.CorruptionPossible())
-            mapAlreadyAskedFor.erase(CInv(MSG_BLOCK, hash));
-        return error("ProcessBlock() : CheckBlock FAILED");
-    }
+    if (!CheckBlockHeader(*pblock, state))
+        return error("ProcessBlockHeader() : CheckBlockHeader FAILED");
 
     CBlockIndex* pcheckpoint = Checkpoints::GetLastCheckpoint(mapBlockIndex);
     if (pcheckpoint && pblock->hashPrevBlock != (chainActive.Tip() ? chainActive.Tip()->GetBlockHash() : uint256(0)))
@@ -2337,6 +2422,47 @@ bool ProcessBlock(CValidationState &state, CNode* pfrom, CBlock* pblock, CDiskBl
         }
     }
 
+    return true;
+}
+
+bool ProcessMerkleBlock(CValidationState &state, const NodeId from, CMerkleBlock& block)
+{
+    AssertLockHeld("cs_main");
+
+    if (!ProcessBlockHeader(state, &block.header))
+        return false;
+
+    if (block.txn.GetTotalTransactions() > (MAX_BLOCK_SIZE / MIN_TRANSACTION_SIZE))
+        return state.DoS(100, error("ProcessPartialBlock() : too many transactions in merkle block"), REJECT_INVALID, "too many transactions");
+
+    std::vector<uint256> vhashTx;
+    uint256 hashMerkleRoot = block.txn.ExtractMatches(vhashTx);
+    if (hashMerkleRoot == uint256(0))
+        return state.DoS(100, error("ProcessPartialBlock() : invalid partial merkle tree"), REJECT_INVALID, "invalid partial merkle tree");
+    if (hashMerkleRoot != block.header.hashMerkleRoot)
+        return state.DoS(100, error("ProcessPartialBlock() : merkle root mismatch"), REJECT_INVALID, "merkle root mismatch");
+    if (vhashTx.size() != block.txn.GetTotalTransactions())
+        return state.DoS(100, error("ProcessPartialBlock() : non-full match"), REJECT_INVALID, "partial match");
+
+    mapBlockSource[block.header.GetHash()] = from;
+    AddReconstructedBlock(from, block.header, vhashTx);
+    return true;
+}
+
+bool ProcessBlock(CValidationState &state, const NodeId* pfrom, CBlock* pblock, CDiskBlockPos *dbp)
+{
+    AssertLockHeld("cs_main");
+
+    if (!ProcessBlockHeader(state, pblock))
+        return false;
+
+    // Preliminary checks
+    uint256 hash = pblock->GetHash();
+    if (!CheckBlock(*pblock, state)) {
+        if (state.CorruptionPossible())
+            mapAlreadyAskedFor.erase(CInv(MSG_BLOCK, hash));
+        return error("ProcessBlock() : CheckBlock FAILED");
+    }
 
     // If we don't already have its previous block, shunt it off to holding area until we get it
     if (pblock->hashPrevBlock != 0 && !mapBlockIndex.count(pblock->hashPrevBlock))
@@ -2350,7 +2476,7 @@ bool ProcessBlock(CValidationState &state, CNode* pfrom, CBlock* pblock, CDiskBl
             mapOrphanBlocksByPrev.insert(make_pair(pblock2->hashPrevBlock, pblock2));
 
             // Ask this guy to fill in what we're missing
-            PushGetBlocks(pfrom, chainActive.Tip(), GetOrphanRoot(pblock2));
+            State(*pfrom)->vhashOrphans.push_back(GetOrphanRoot(pblock2));
         }
         return true;
     }
@@ -2480,9 +2606,11 @@ uint256 CPartialMerkleTree::TraverseAndExtract(int height, unsigned int pos, uns
     } else {
         // otherwise, descend into the subtrees to extract matched txids and hashes
         uint256 left = TraverseAndExtract(height-1, pos*2, nBitsUsed, nHashUsed, vMatch), right;
-        if (pos*2+1 < CalcTreeWidth(height-1))
+        if (pos*2+1 < CalcTreeWidth(height-1)) {
             right = TraverseAndExtract(height-1, pos*2+1, nBitsUsed, nHashUsed, vMatch);
-        else
+            if (right == left)
+                fBad = true; // Duplicated subtree.
+        } else
             right = left;
         // and combine them before returning
         return Hash(BEGIN(left), END(left), BEGIN(right), END(right));
@@ -3023,6 +3151,7 @@ bool static AlreadyHave(const CInv& inv)
                 pcoinsTip->HaveCoins(inv.hash);
         }
     case MSG_BLOCK:
+    case MSG_FILTERED_BLOCK:
         return mapBlockIndex.count(inv.hash) ||
                mapOrphanBlocks.count(inv.hash);
     }
@@ -3276,6 +3405,11 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv)
     else if (strCommand == "verack")
     {
         pfrom->SetRecvVersion(min(pfrom->nVersion, PROTOCOL_VERSION));
+
+        if (pfrom->nVersion > BIP0037_VERSION) {
+            static std::vector<unsigned char> filter(1, (unsigned char)0xFF);
+            pfrom->PushMessage("filterload", filter, (uint32_t)1, (uint32_t)0, (unsigned char)0);
+        }
     }
 
 
@@ -3369,13 +3503,16 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv)
 
         for (unsigned int nInv = 0; nInv < vInv.size(); nInv++)
         {
-            const CInv &inv = vInv[nInv];
+            CInv inv = vInv[nInv];
 
             boost::this_thread::interruption_point();
             pfrom->AddInventoryKnown(inv);
 
             bool fAlreadyHave = AlreadyHave(inv);
             LogPrint("net", "  got inventory: %s  %s\n", inv.ToString().c_str(), fAlreadyHave ? "have" : "new");
+
+            if (pfrom->nVersion > BIP0037_VERSION && inv.type == MSG_BLOCK && !IsInitialBlockDownload() && !RegTest())
+                inv.type = MSG_FILTERED_BLOCK;
 
             if (!fAlreadyHave) {
                 if (!fImporting && !fReindex)
@@ -3500,10 +3637,16 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv)
         CTransaction tx;
         vRecv >> tx;
 
-        CInv inv(MSG_TX, tx.GetHash());
+        uint256 hash = tx.GetHash();
+        CInv inv(MSG_TX, hash);
         pfrom->AddInventoryKnown(inv);
 
         LOCK(cs_main);
+
+        // If the transaction is valid, use it for reconstructing partial blocks.
+        CValidationState state1;
+        if (CheckTransaction(tx, state1))
+            ReconstructBlock(hash, tx);
 
         bool fMissingInputs = false;
         CValidationState state;
@@ -3591,13 +3734,35 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv)
 
         CInv inv(MSG_BLOCK, block.GetHash());
         pfrom->AddInventoryKnown(inv);
+        NodeId nodeid = pfrom->GetId();
 
         LOCK(cs_main);
         // Remember who we got this block from.
         mapBlockSource[inv.hash] = pfrom->GetId();
 
         CValidationState state;
-        ProcessBlock(state, pfrom, &block);
+ 
+        ProcessBlock(state, &nodeid, &block);
+    }
+
+
+    else if (strCommand == "merkleblock" && !fImporting && !fReindex) {
+        CMerkleBlock block;
+        vRecv >> block;
+
+        LogPrint("net", "received partial block %s\n", block.header.GetHash().ToString().c_str());
+
+        LOCK(cs_main);
+
+        CValidationState state;
+        if (!ProcessMerkleBlock(state, pfrom->GetId(), block)) {
+            int nDoS = 0;
+            if (state.Invalid(nDoS)) {
+                pfrom->PushMessage("reject", strCommand, state.GetRejectCode(), state.GetRejectReason(), block.header.GetHash());
+                if (nDoS > 0)
+                    Misbehaving(pfrom->GetId(), nDoS);
+            }
+        }
     }
 
 
@@ -4054,6 +4219,10 @@ bool SendMessages(CNode* pto, bool fSendTrickle)
             }
             state.fShouldBan = false;
         }
+
+        BOOST_FOREACH(const uint256& hashBlock, state.vhashOrphans)
+            PushGetBlocks(pto, chainActive.Tip(), hashBlock);
+        state.vhashOrphans.clear();
 
         BOOST_FOREACH(const CBlockReject& reject, state.rejects)
             pto->PushMessage("reject", (string)"block", reject.chRejectCode, reject.strRejectReason, reject.hashBlock);
