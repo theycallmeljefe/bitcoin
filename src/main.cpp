@@ -1106,6 +1106,32 @@ uint256 static GetOrphanRoot(const CBlockHeader* pblock)
     return pblock->GetHash();
 }
 
+// Remove a random orphan block and what depended on it.
+void static PruneOrphanBlocks()
+{
+    if (mapOrphanBlocksByPrev.size() <= MAX_ORPHAN_BLOCKS)
+        return;
+
+    // Pick a random orphan block.
+    int pos = insecure_rand() % mapOrphanBlocksByPrev.size();
+    std::multimap<uint256, CBlock*>::iterator it = mapOrphanBlocksByPrev.begin();
+    while (pos--) it++;
+    uint256 hash = it->second->GetHash();
+
+    // As long as this block has other orphans depending on it, move to one of those successors.
+    do {
+        std::multimap<uint256, CBlock*>::iterator it2 = mapOrphanBlocksByPrev.find(hash);
+        if (it2 == mapOrphanBlocksByPrev.end())
+            break;
+        it = it2;
+        hash = it->second->GetHash();
+    } while(1);
+
+    delete it->second;
+    mapOrphanBlocksByPrev.erase(it);
+    mapOrphanBlocks.erase(hash);
+}
+
 int64_t GetBlockValue(int nHeight, int64_t nFees)
 {
     int64_t nSubsidy = 50 * COIN;
@@ -2419,10 +2445,11 @@ bool ProcessBlock(CValidationState &state, CNode* pfrom, CBlock* pblock, CDiskBl
     // If we don't already have its previous block, shunt it off to holding area until we get it
     if (pblock->hashPrevBlock != 0 && !mapBlockIndex.count(pblock->hashPrevBlock))
     {
-        LogPrintf("ProcessBlock: ORPHAN BLOCK, prev=%s\n", pblock->hashPrevBlock.ToString().c_str());
+        LogPrintf("ProcessBlock: ORPHAN BLOCK %lu, prev=%s\n", (unsigned long)mapOrphanBlocks.size(), pblock->hashPrevBlock.ToString().c_str());
 
         // Accept orphans as long as there is a node to request its parents from
         if (pfrom) {
+            PruneOrphanBlocks();
             CBlock* pblock2 = new CBlock(*pblock);
             mapOrphanBlocks.insert(make_pair(hash, pblock2));
             mapOrphanBlocksByPrev.insert(make_pair(pblock2->hashPrevBlock, pblock2));
