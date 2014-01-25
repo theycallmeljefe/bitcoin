@@ -40,6 +40,8 @@ public:
 
 typedef std::map<CKeyID, CKey> KeyMap;
 typedef std::map<CScriptID, CScript > ScriptMap;
+typedef std::map<CKeyID, std::pair<CChainCode, int> > ChainCodeMap;
+typedef std::map<CKeyID, std::pair<CKeyID, uint32_t> > DerivationMap;
 
 /** Basic key store, that keeps keys in an address->secret map */
 class CBasicKeyStore : public CKeyStore
@@ -88,6 +90,23 @@ public:
     virtual bool AddCScript(const CScript& redeemScript);
     virtual bool HaveCScript(const CScriptID &hash) const;
     virtual bool GetCScript(const CScriptID &hash, CScript& redeemScriptOut) const;
+};
+
+class CDerivingKeyStore : public CBasicKeyStore {
+protected:
+    DerivationMap mapDerivation;
+    ChainCodeMap mapChainCode;
+
+public:
+    virtual bool GetExtKey(const CKeyID &keyid, CExtKey& key) const;
+    virtual bool GetExtPubKey(const CKeyID &keyid, CExtPubKey& key) const;
+
+    virtual bool AddMeta(const CKeyID &key, const CKeyID &keyParent, uint32_t nIndex, const CChainCode &chaincode = CChainCode(), int nDepth = 0);
+
+    virtual bool HaveKey(const CKeyID &key) const;
+    virtual bool GetKey(const CKeyID &key, CKey &keyOut) const;
+    virtual bool GetPubKey(const CKeyID &key, CPubKey &keyOut) const;
+    virtual void GetKeys(std::set<CKeyID> &setKeys) const;
 };
 
 typedef std::vector<unsigned char, secure_allocator<unsigned char> > CKeyingMaterial;

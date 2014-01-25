@@ -2,6 +2,7 @@
 
 #include "base58.h"
 #include "key.h"
+#include "keystore.h"
 #include "uint256.h"
 #include "util.h"
 
@@ -74,10 +75,13 @@ TestVector test2 =
 
 void RunTest(const TestVector &test) {
     std::vector<unsigned char> seed = ParseHex(test.strHexMaster);
+    CDerivingKeyStore store;
     CExtKey key;
     CExtPubKey pubkey;
     key.SetMaster(&seed[0], seed.size());
     pubkey = key.Neuter();
+    store.AddKey(key.key);
+    store.AddMeta(key.key.GetPubKey().GetID(), CKeyID(), 0, key.chaincode, 0);
     BOOST_FOREACH(const TestDerivation &derive, test.vDerive) {
         unsigned char data[74];
         key.Encode(data);
@@ -98,6 +102,15 @@ void RunTest(const TestVector &test) {
             BOOST_CHECK(pubkey.Derive(pubkeyNew2, derive.nChild));
             BOOST_CHECK(pubkeyNew == pubkeyNew2);
         }
+
+        // Check whether CDerivationKeyStore finds the same result.
+        CKeyID parent = key.key.GetPubKey().GetID();
+        CKeyID child = keyNew.key.GetPubKey().GetID();
+        store.AddMeta(child, parent, derive.nChild);
+        CExtKey keyStore;
+        BOOST_CHECK(store.GetExtKey(child, keyStore));
+        BOOST_CHECK(keyStore == keyNew);
+
         key = keyNew;
         pubkey = pubkeyNew;
     }
