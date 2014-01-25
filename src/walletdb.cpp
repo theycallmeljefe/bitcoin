@@ -64,7 +64,7 @@ bool CWalletDB::EraseTx(uint256 hash)
     return Erase(std::make_pair(std::string("tx"), hash));
 }
 
-bool CWalletDB::WriteKey(const CPubKey& vchPubKey, const CPrivKey& vchPrivKey, const CKeyMetadata& keyMeta)
+bool CWalletDB::WriteKey(const CPubKey& vchPubKey, const CPrivKey& vchPrivKey, const CExtKeyMetadata& keyMeta)
 {
     nWalletDBUpdated++;
 
@@ -83,7 +83,7 @@ bool CWalletDB::WriteKey(const CPubKey& vchPubKey, const CPrivKey& vchPrivKey, c
 
 bool CWalletDB::WriteCryptedKey(const CPubKey& vchPubKey,
                                 const std::vector<unsigned char>& vchCryptedSecret,
-                                const CKeyMetadata &keyMeta)
+                                const CExtKeyMetadata &keyMeta)
 {
     const bool fEraseUnencryptedKey = true;
     nWalletDBUpdated++;
@@ -512,7 +512,7 @@ ReadKeyValue(CWallet* pwallet, CDataStream& ssKey, CDataStream& ssValue,
         {
             CPubKey vchPubKey;
             ssKey >> vchPubKey;
-            CKeyMetadata keyMeta;
+            CExtKeyMetadata keyMeta;
             ssValue >> keyMeta;
             wss.nKeyMeta++;
 
