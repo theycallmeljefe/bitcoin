@@ -62,6 +62,12 @@ AC_ARG_ENABLE([upnp-default],
   [use_upnp_default=$enableval],
   [use_upnp_default=no])
 
+AC_ARG_ENABLE([libsecp256k1],
+  [AS_HELP_STRING([--enable-libsecp256k1],
+  [use libsecp256k1 for EC operations (default is no)])],
+  [use_libsecp256k1=$enableval],
+  [use_libsecp256k=no])
+
 dnl enable ipv6 support
 AC_ARG_ENABLE([ipv6],
   [AS_HELP_STRING([--enable-ipv6],
@@ -660,6 +666,7 @@ AM_CONDITIONAL([USE_QRCODE], [test x$use_qr = xyes])
 AM_CONDITIONAL([USE_LCOV],[test x$use_lcov == xyes])
 AM_CONDITIONAL([USE_COMPARISON_TOOL],[test x$use_comparison_tool != xno])
 AM_CONDITIONAL([USE_COMPARISON_TOOL_REORG_TESTS],[test x$use_comparison_tool_reorg_test != xno])
+AM_CONDITIONAL([USE_LIBSECP256K1],[test x$use_libsecp256k1 != xno])
 
 AC_DEFINE(CLIENT_VERSION_MAJOR, _CLIENT_VERSION_MAJOR, [Major version])
 AC_DEFINE(CLIENT_VERSION_MINOR, _CLIENT_VERSION_MINOR, [Minor version])
@@ -688,4 +695,9 @@ AC_SUBST(BUILD_TEST_QT)
 AC_CONFIG_FILES([Makefile src/Makefile src/test/Makefile src/qt/Makefile src/qt/test/Makefile share/setup.nsi share/qt/Info.plist])
 AC_CONFIG_FILES([qa/pull-tester/run-bitcoind-for-test.sh],[chmod +x qa/pull-tester/run-bitcoind-for-test.sh])
 AC_CONFIG_FILES([qa/pull-tester/build-tests.sh],[chmod +x qa/pull-tester/build-tests.sh])
+
+if test x$use_libsecp256k1 = xyes; then
+  AC_CONFIG_SUBDIRS([src/secp256k1])
+fi
+
 AC_OUTPUT
