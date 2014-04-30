@@ -3582,6 +3582,8 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv)
 
         LOCK(cs_main);
 
+        CBlockIndex *pindexForceBlock = NULL;
+
         for (unsigned int nInv = 0; nInv < vInv.size(); nInv++)
         {
             const CInv &inv = vInv[nInv];
@@ -3603,9 +3605,22 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv)
                 PushGetBlocks(pfrom, chainActive.Tip(), GetOrphanRoot(inv.hash));
             }
 
+            if (vInv.size() >= 500 && inv.type == MSG_BLOCK) {
+                // In case a full getblocks (with 500 hashes) is received, and we already have them,
+                // it's possible we need a very deep reorganization. Continue asking for successor
+                // blocks in this case.
+                if (mapBlockIndex.count(inv.hash))
+                    pindexForceBlock = mapBlockIndex[inv.hash];
+                else
+                    pindexForceBlock = NULL;
+            }
+
             // Track requests for our stuff
             g_signals.Inventory(inv.hash);
         }
+
+        if (pindexForceBlock)
+            PushGetBlocks(pfrom, pindexForceBlock, uint256(0));
     }
 
 
