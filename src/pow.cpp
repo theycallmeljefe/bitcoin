@@ -10,7 +10,7 @@
 #include "main.h"
 #include "uint256.h"
 
-unsigned int GetNextWorkRequired(const CBlockIndex* pindexLast, const CBlockHeader *pblock)
+unsigned int GetNextWorkRequired(const CBlockIndex* pindexLast, const CBlockHeader* pblock)
 {
     unsigned int nProofOfWorkLimit = Params().ProofOfWorkLimit().GetCompact();
 
@@ -19,17 +19,14 @@ unsigned int GetNextWorkRequired(const CBlockIndex* pindexLast, const CBlockHead
         return nProofOfWorkLimit;
 
     // Only change once per interval
-    if ((pindexLast->nHeight+1) % Params().Interval() != 0)
-    {
-        if (Params().AllowMinDifficultyBlocks())
-        {
+    if ((pindexLast->nHeight + 1) % Params().Interval() != 0) {
+        if (Params().AllowMinDifficultyBlocks()) {
             // Special difficulty rule for testnet:
             // If the new block's timestamp is more than 2* 10 minutes
             // then allow mining of a min-difficulty block.
-            if (pblock->GetBlockTime() > pindexLast->GetBlockTime() + Params().TargetSpacing()*2)
+            if (pblock->GetBlockTime() > pindexLast->GetBlockTime() + Params().TargetSpacing() * 2)
                 return nProofOfWorkLimit;
-            else
-            {
+            else {
                 // Return the last non-special-min-difficulty-rules-block
                 const CBlockIndex* pindex = pindexLast;
                 while (pindex->pprev && pindex->nHeight % Params().Interval() != 0 && pindex->nBits == nProofOfWorkLimit)
@@ -42,17 +39,17 @@ unsigned int GetNextWorkRequired(const CBlockIndex* pindexLast, const CBlockHead
 
     // Go back by what we want to be 14 days worth of blocks
     const CBlockIndex* pindexFirst = pindexLast;
-    for (int i = 0; pindexFirst && i < Params().Interval()-1; i++)
+    for (int i = 0; pindexFirst && i < Params().Interval() - 1; i++)
         pindexFirst = pindexFirst->pprev;
     assert(pindexFirst);
 
     // Limit adjustment step
     int64_t nActualTimespan = pindexLast->GetBlockTime() - pindexFirst->GetBlockTime();
     LogPrintf("  nActualTimespan = %d  before bounds\n", nActualTimespan);
-    if (nActualTimespan < Params().TargetTimespan()/4)
-        nActualTimespan = Params().TargetTimespan()/4;
-    if (nActualTimespan > Params().TargetTimespan()*4)
-        nActualTimespan = Params().TargetTimespan()*4;
+    if (nActualTimespan < Params().TargetTimespan() / 4)
+        nActualTimespan = Params().TargetTimespan() / 4;
+    if (nActualTimespan > Params().TargetTimespan() * 4)
+        nActualTimespan = Params().TargetTimespan() * 4;
 
     // Retarget
     uint256 bnNew;
@@ -98,20 +95,19 @@ bool CheckProofOfWork(uint256 hash, unsigned int nBits)
 //
 unsigned int ComputeMinWork(unsigned int nBase, int64_t nTime)
 {
-    const uint256 &bnLimit = Params().ProofOfWorkLimit();
+    const uint256& bnLimit = Params().ProofOfWorkLimit();
     // Testnet has min-difficulty blocks
     // after Params().TargetSpacing()*2 time between blocks:
-    if (Params().AllowMinDifficultyBlocks() && nTime > Params().TargetSpacing()*2)
+    if (Params().AllowMinDifficultyBlocks() && nTime > Params().TargetSpacing() * 2)
         return bnLimit.GetCompact();
 
     uint256 bnResult;
     bnResult.SetCompact(nBase);
-    while (nTime > 0 && bnResult < bnLimit)
-    {
+    while (nTime > 0 && bnResult < bnLimit) {
         // Maximum 400% adjustment...
         bnResult *= 4;
         // ... in best-case exactly 4-times-normal target time
-        nTime -= Params().TargetTimespan()*4;
+        nTime -= Params().TargetTimespan() * 4;
     }
     if (bnResult > bnLimit)
         bnResult = bnLimit;

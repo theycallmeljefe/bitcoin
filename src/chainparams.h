@@ -15,9 +15,10 @@
 
 typedef unsigned char MessageStartChars[MESSAGE_START_SIZE];
 
-struct CDNSSeedData {
+struct CDNSSeedData
+{
     std::string name, host;
-    CDNSSeedData(const std::string &strName, const std::string &strHost) : name(strName), host(strHost) {}
+    CDNSSeedData(const std::string& strName, const std::string& strHost) : name(strName), host(strHost) {}
 };
 
 /**
@@ -75,6 +76,7 @@ public:
     const std::vector<CDNSSeedData>& DNSSeeds() const { return vSeeds; }
     const std::vector<unsigned char>& Base58Prefix(Base58Type type) const { return base58Prefixes[type]; }
     const std::vector<CAddress>& FixedSeeds() const { return vFixedSeeds; }
+
 protected:
     CChainParams() {}
 
@@ -109,7 +111,7 @@ protected:
  * Return the currently selected parameters. This won't change after app startup
  * outside of the unit tests.
  */
-const CChainParams &Params();
+const CChainParams& Params();
 
 /** Sets the params returned by Params() to those for the given network. */
 void SelectParams(CBaseChainParams::Network network);

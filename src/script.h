@@ -33,14 +33,13 @@ public:
 
 class CScriptNum
 {
-// Numeric opcodes (OP_1ADD, etc) are restricted to operating on 4-byte integers.
-// The semantics are subtle, though: operands must be in the range [-2^31 +1...2^31 -1],
-// but results may overflow (and are valid as long as they are not used in a subsequent
-// numeric operation). CScriptNum enforces those semantics by storing results as
-// an int64 and allowing out-of-range values to be returned as a vector of bytes but
-// throwing an exception if arithmetic is done or the result is interpreted as an integer.
+    // Numeric opcodes (OP_1ADD, etc) are restricted to operating on 4-byte integers.
+    // The semantics are subtle, though: operands must be in the range [-2^31 +1...2^31 -1],
+    // but results may overflow (and are valid as long as they are not used in a subsequent
+    // numeric operation). CScriptNum enforces those semantics by storing results as
+    // an int64 and allowing out-of-range values to be returned as a vector of bytes but
+    // throwing an exception if arithmetic is done or the result is interpreted as an integer.
 public:
-
     explicit CScriptNum(const int64_t& n)
     {
         m_value = n;
@@ -53,52 +52,52 @@ public:
         m_value = set_vch(vch);
     }
 
-    inline bool operator==(const int64_t& rhs) const    { return m_value == rhs; }
-    inline bool operator!=(const int64_t& rhs) const    { return m_value != rhs; }
-    inline bool operator<=(const int64_t& rhs) const    { return m_value <= rhs; }
-    inline bool operator< (const int64_t& rhs) const    { return m_value <  rhs; }
-    inline bool operator>=(const int64_t& rhs) const    { return m_value >= rhs; }
-    inline bool operator> (const int64_t& rhs) const    { return m_value >  rhs; }
+    inline bool operator==(const int64_t& rhs) const { return m_value == rhs; }
+    inline bool operator!=(const int64_t& rhs) const { return m_value != rhs; }
+    inline bool operator<=(const int64_t& rhs) const { return m_value <= rhs; }
+    inline bool operator<(const int64_t& rhs) const { return m_value < rhs; }
+    inline bool operator>=(const int64_t& rhs) const { return m_value >= rhs; }
+    inline bool operator>(const int64_t& rhs) const { return m_value > rhs; }
 
     inline bool operator==(const CScriptNum& rhs) const { return operator==(rhs.m_value); }
     inline bool operator!=(const CScriptNum& rhs) const { return operator!=(rhs.m_value); }
     inline bool operator<=(const CScriptNum& rhs) const { return operator<=(rhs.m_value); }
-    inline bool operator< (const CScriptNum& rhs) const { return operator< (rhs.m_value); }
+    inline bool operator<(const CScriptNum& rhs) const { return operator<(rhs.m_value); }
     inline bool operator>=(const CScriptNum& rhs) const { return operator>=(rhs.m_value); }
-    inline bool operator> (const CScriptNum& rhs) const { return operator> (rhs.m_value); }
+    inline bool operator>(const CScriptNum& rhs) const { return operator>(rhs.m_value); }
 
-    inline CScriptNum operator+(   const int64_t& rhs)    const { return CScriptNum(m_value + rhs);}
-    inline CScriptNum operator-(   const int64_t& rhs)    const { return CScriptNum(m_value - rhs);}
-    inline CScriptNum operator+(   const CScriptNum& rhs) const { return operator+(rhs.m_value);   }
-    inline CScriptNum operator-(   const CScriptNum& rhs) const { return operator-(rhs.m_value);   }
+    inline CScriptNum operator+(const int64_t& rhs) const { return CScriptNum(m_value + rhs); }
+    inline CScriptNum operator-(const int64_t& rhs) const { return CScriptNum(m_value - rhs); }
+    inline CScriptNum operator+(const CScriptNum& rhs) const { return operator+(rhs.m_value); }
+    inline CScriptNum operator-(const CScriptNum& rhs) const { return operator-(rhs.m_value); }
 
-    inline CScriptNum& operator+=( const CScriptNum& rhs)       { return operator+=(rhs.m_value);  }
-    inline CScriptNum& operator-=( const CScriptNum& rhs)       { return operator-=(rhs.m_value);  }
+    inline CScriptNum& operator+=(const CScriptNum& rhs) { return operator+=(rhs.m_value); }
+    inline CScriptNum& operator-=(const CScriptNum& rhs) { return operator-=(rhs.m_value); }
 
-    inline CScriptNum operator-()                         const
+    inline CScriptNum operator-() const
     {
         assert(m_value != std::numeric_limits<int64_t>::min());
         return CScriptNum(-m_value);
     }
 
-    inline CScriptNum& operator=( const int64_t& rhs)
+    inline CScriptNum& operator=(const int64_t& rhs)
     {
         m_value = rhs;
         return *this;
     }
 
-    inline CScriptNum& operator+=( const int64_t& rhs)
+    inline CScriptNum& operator+=(const int64_t& rhs)
     {
         assert(rhs == 0 || (rhs > 0 && m_value <= std::numeric_limits<int64_t>::max() - rhs) ||
-                           (rhs < 0 && m_value >= std::numeric_limits<int64_t>::min() - rhs));
+               (rhs < 0 && m_value >= std::numeric_limits<int64_t>::min() - rhs));
         m_value += rhs;
         return *this;
     }
 
-    inline CScriptNum& operator-=( const int64_t& rhs)
+    inline CScriptNum& operator-=(const int64_t& rhs)
     {
         assert(rhs == 0 || (rhs > 0 && m_value >= std::numeric_limits<int64_t>::min() + rhs) ||
-                           (rhs < 0 && m_value <= std::numeric_limits<int64_t>::max() + rhs));
+               (rhs < 0 && m_value <= std::numeric_limits<int64_t>::max() + rhs));
         m_value -= rhs;
         return *this;
     }
@@ -119,29 +118,28 @@ public:
 
     static std::vector<unsigned char> serialize(const int64_t& value)
     {
-        if(value == 0)
+        if (value == 0)
             return std::vector<unsigned char>();
 
         std::vector<unsigned char> result;
         const bool neg = value < 0;
         uint64_t absvalue = neg ? -value : value;
 
-        while(absvalue)
-        {
+        while (absvalue) {
             result.push_back(absvalue & 0xff);
             absvalue >>= 8;
         }
 
 
-//    - If the most significant byte is >= 0x80 and the value is positive, push a
-//    new zero-byte to make the significant byte < 0x80 again.
+        //    - If the most significant byte is >= 0x80 and the value is positive, push a
+        //    new zero-byte to make the significant byte < 0x80 again.
 
-//    - If the most significant byte is >= 0x80 and the value is negative, push a
-//    new 0x80 byte that will be popped off when converting to an integral.
+        //    - If the most significant byte is >= 0x80 and the value is negative, push a
+        //    new 0x80 byte that will be popped off when converting to an integral.
 
-//    - If the most significant byte is < 0x80 and the value is negative, add
-//    0x80 to it, since it will be subtracted and interpreted as a negative when
-//    converting to an integral.
+        //    - If the most significant byte is < 0x80 and the value is negative, add
+        //    0x80 to it, since it will be subtracted and interpreted as a negative when
+        //    converting to an integral.
 
         if (result.back() & 0x80)
             result.push_back(neg ? 0x80 : 0);
@@ -156,27 +154,26 @@ public:
 private:
     static int64_t set_vch(const std::vector<unsigned char>& vch)
     {
-      if (vch.empty())
-          return 0;
+        if (vch.empty())
+            return 0;
 
-      int64_t result = 0;
-      for (size_t i = 0; i != vch.size(); ++i)
-          result |= static_cast<int64_t>(vch[i]) << 8*i;
+        int64_t result = 0;
+        for (size_t i = 0; i != vch.size(); ++i)
+            result |= static_cast<int64_t>(vch[i]) << 8 * i;
 
-      // If the input vector's most significant byte is 0x80, remove it from
-      // the result's msb and return a negative.
-      if (vch.back() & 0x80)
-          return -(result & ~(0x80 << (8 * (vch.size() - 1))));
+        // If the input vector's most significant byte is 0x80, remove it from
+        // the result's msb and return a negative.
+        if (vch.back() & 0x80)
+            return -(result & ~(0x80 << (8 * (vch.size() - 1))));
 
-      return result;
+        return result;
     }
 
     int64_t m_value;
 };
 
 /** Signature hash types/flags */
-enum
-{
+enum {
     SIGHASH_ALL = 1,
     SIGHASH_NONE = 2,
     SIGHASH_SINGLE = 3,
@@ -184,19 +181,17 @@ enum
 };
 
 /** Script verification flags */
-enum
-{
-    SCRIPT_VERIFY_NONE      = 0,
-    SCRIPT_VERIFY_P2SH      = (1U << 0), // evaluate P2SH (BIP16) subscripts
+enum {
+    SCRIPT_VERIFY_NONE = 0,
+    SCRIPT_VERIFY_P2SH = (1U << 0),      // evaluate P2SH (BIP16) subscripts
     SCRIPT_VERIFY_STRICTENC = (1U << 1), // enforce strict conformance to DER and SEC2 for signatures and pubkeys
-    SCRIPT_VERIFY_LOW_S     = (1U << 2), // enforce low S values (<n/2) in signatures (depends on STRICTENC)
-    SCRIPT_VERIFY_NOCACHE   = (1U << 3), // do not store results in signature cache (but do query it)
+    SCRIPT_VERIFY_LOW_S = (1U << 2),     // enforce low S values (<n/2) in signatures (depends on STRICTENC)
+    SCRIPT_VERIFY_NOCACHE = (1U << 3),   // do not store results in signature cache (but do query it)
     SCRIPT_VERIFY_NULLDUMMY = (1U << 4), // verify dummy stack item consumed by CHECKMULTISIG is of zero-length
 };
 
 /** IsMine() return codes */
-enum isminetype
-{
+enum isminetype {
     ISMINE_NO = 0,
     ISMINE_WATCH_ONLY = 1,
     ISMINE_SPENDABLE = 2,
@@ -224,8 +219,7 @@ static const unsigned int STANDARD_SCRIPT_VERIFY_FLAGS = MANDATORY_SCRIPT_VERIFY
 // For convenience, standard but not mandatory verify flags.
 static const unsigned int STANDARD_NOT_MANDATORY_VERIFY_FLAGS = STANDARD_SCRIPT_VERIFY_FLAGS & ~MANDATORY_SCRIPT_VERIFY_FLAGS;
 
-enum txnouttype
-{
+enum txnouttype {
     TX_NONSTANDARD,
     // 'standard' transaction types:
     TX_PUBKEY,
@@ -235,10 +229,11 @@ enum txnouttype
     TX_NULL_DATA,
 };
 
-class CNoDestination {
+class CNoDestination
+{
 public:
-    friend bool operator==(const CNoDestination &a, const CNoDestination &b) { return true; }
-    friend bool operator<(const CNoDestination &a, const CNoDestination &b) { return true; }
+    friend bool operator==(const CNoDestination& a, const CNoDestination& b) { return true; }
+    friend bool operator<(const CNoDestination& a, const CNoDestination& b) { return true; }
 };
 
 /** A txout script template with a specific destination. It is either:
@@ -252,8 +247,7 @@ typedef boost::variant<CNoDestination, CKeyID, CScriptID> CTxDestination;
 const char* GetTxnOutputType(txnouttype t);
 
 /** Script opcodes */
-enum opcodetype
-{
+enum opcodetype {
     // push value
     OP_0 = 0x00,
     OP_FALSE = OP_0,
@@ -263,7 +257,7 @@ enum opcodetype
     OP_1NEGATE = 0x4f,
     OP_RESERVED = 0x50,
     OP_1 = 0x51,
-    OP_TRUE=OP_1,
+    OP_TRUE = OP_1,
     OP_2 = 0x52,
     OP_3 = 0x53,
     OP_4 = 0x54,
@@ -387,7 +381,6 @@ enum opcodetype
     OP_NOP10 = 0xb9,
 
 
-
     // template matching params
     OP_SMALLDATA = 0xf9,
     OP_SMALLINTEGER = 0xfa,
@@ -401,7 +394,6 @@ enum opcodetype
 const char* GetOpName(opcodetype opcode);
 
 
-
 inline std::string ValueString(const std::vector<unsigned char>& vch)
 {
     if (vch.size() <= 4)
@@ -413,8 +405,7 @@ inline std::string ValueString(const std::vector<unsigned char>& vch)
 inline std::string StackString(const std::vector<std::vector<unsigned char> >& vStack)
 {
     std::string str;
-    BOOST_FOREACH(const std::vector<unsigned char>& vch, vStack)
-    {
+    BOOST_FOREACH (const std::vector<unsigned char>& vch, vStack) {
         if (!str.empty())
             str += " ";
         str += ValueString(vch);
@@ -423,34 +414,28 @@ inline std::string StackString(const std::vector<std::vector<unsigned char> >& v
 }
 
 
-
-
-
-
-
-
 /** Serialized script, used inside transaction inputs and outputs */
 class CScript : public std::vector<unsigned char>
 {
 protected:
     CScript& push_int64(int64_t n)
     {
-        if (n == -1 || (n >= 1 && n <= 16))
-        {
+        if (n == -1 || (n >= 1 && n <= 16)) {
             push_back(n + (OP_1 - 1));
-        }
-        else
-        {
+        } else {
             *this << CScriptNum::serialize(n);
         }
         return *this;
     }
+
 public:
-    CScript() { }
-    CScript(const CScript& b) : std::vector<unsigned char>(b.begin(), b.end()) { }
-    CScript(const_iterator pbegin, const_iterator pend) : std::vector<unsigned char>(pbegin, pend) { }
+    CScript() {}
+    CScript(const CScript& b) : std::vector<unsigned char>(b.begin(), b.end()) {}
+    CScript(const_iterator pbegin, const_iterator pend) : std::vector<unsigned char>(pbegin, pend) {}
 #ifndef _MSC_VER
-    CScript(const unsigned char* pbegin, const unsigned char* pend) : std::vector<unsigned char>(pbegin, pend) { }
+    CScript(const unsigned char* pbegin, const unsigned char* pend) : std::vector<unsigned char>(pbegin, pend)
+    {
+    }
 #endif
 
     CScript& operator+=(const CScript& b)
@@ -467,9 +452,9 @@ public:
     }
 
 
-    CScript(int64_t b)        { operator<<(b); }
+    CScript(int64_t b) { operator<<(b); }
 
-    explicit CScript(opcodetype b)     { operator<<(b); }
+    explicit CScript(opcodetype b) { operator<<(b); }
     explicit CScript(const uint256& b) { operator<<(b); }
     explicit CScript(const CScriptNum& b) { operator<<(b); }
     explicit CScript(const std::vector<unsigned char>& b) { operator<<(b); }
@@ -515,23 +500,16 @@ public:
 
     CScript& operator<<(const std::vector<unsigned char>& b)
     {
-        if (b.size() < OP_PUSHDATA1)
-        {
+        if (b.size() < OP_PUSHDATA1) {
             insert(end(), (unsigned char)b.size());
-        }
-        else if (b.size() <= 0xff)
-        {
+        } else if (b.size() <= 0xff) {
             insert(end(), OP_PUSHDATA1);
             insert(end(), (unsigned char)b.size());
-        }
-        else if (b.size() <= 0xffff)
-        {
+        } else if (b.size() <= 0xffff) {
             insert(end(), OP_PUSHDATA2);
             unsigned short nSize = b.size();
             insert(end(), (unsigned char*)&nSize, (unsigned char*)&nSize + sizeof(nSize));
-        }
-        else
-        {
+        } else {
             insert(end(), OP_PUSHDATA4);
             unsigned int nSize = b.size();
             insert(end(), (unsigned char*)&nSize, (unsigned char*)&nSize + sizeof(nSize));
@@ -551,19 +529,19 @@ public:
 
     bool GetOp(iterator& pc, opcodetype& opcodeRet, std::vector<unsigned char>& vchRet)
     {
-         // Wrapper so it can be called with either iterator or const_iterator
-         const_iterator pc2 = pc;
-         bool fRet = GetOp2(pc2, opcodeRet, &vchRet);
-         pc = begin() + (pc2 - begin());
-         return fRet;
+        // Wrapper so it can be called with either iterator or const_iterator
+        const_iterator pc2 = pc;
+        bool fRet = GetOp2(pc2, opcodeRet, &vchRet);
+        pc = begin() + (pc2 - begin());
+        return fRet;
     }
 
     bool GetOp(iterator& pc, opcodetype& opcodeRet)
     {
-         const_iterator pc2 = pc;
-         bool fRet = GetOp2(pc2, opcodeRet, NULL);
-         pc = begin() + (pc2 - begin());
-         return fRet;
+        const_iterator pc2 = pc;
+        bool fRet = GetOp2(pc2, opcodeRet, NULL);
+        pc = begin() + (pc2 - begin());
+        return fRet;
     }
 
     bool GetOp(const_iterator& pc, opcodetype& opcodeRet, std::vector<unsigned char>& vchRet) const
@@ -590,29 +568,21 @@ public:
         unsigned int opcode = *pc++;
 
         // Immediate operand
-        if (opcode <= OP_PUSHDATA4)
-        {
+        if (opcode <= OP_PUSHDATA4) {
             unsigned int nSize = 0;
-            if (opcode < OP_PUSHDATA1)
-            {
+            if (opcode < OP_PUSHDATA1) {
                 nSize = opcode;
-            }
-            else if (opcode == OP_PUSHDATA1)
-            {
+            } else if (opcode == OP_PUSHDATA1) {
                 if (end() - pc < 1)
                     return false;
                 nSize = *pc++;
-            }
-            else if (opcode == OP_PUSHDATA2)
-            {
+            } else if (opcode == OP_PUSHDATA2) {
                 if (end() - pc < 2)
                     return false;
                 nSize = 0;
                 memcpy(&nSize, &pc[0], 2);
                 pc += 2;
-            }
-            else if (opcode == OP_PUSHDATA4)
-            {
+            } else if (opcode == OP_PUSHDATA4) {
                 if (end() - pc < 4)
                     return false;
                 memcpy(&nSize, &pc[0], 4);
@@ -642,7 +612,7 @@ public:
         assert(n >= 0 && n <= 16);
         if (n == 0)
             return OP_0;
-        return (opcodetype)(OP_1+n-1);
+        return (opcodetype)(OP_1 + n - 1);
     }
 
     int FindAndDelete(const CScript& b)
@@ -652,15 +622,12 @@ public:
             return nFound;
         iterator pc = begin();
         opcodetype opcode;
-        do
-        {
-            while (end() - pc >= (long)b.size() && memcmp(&pc[0], &b[0], b.size()) == 0)
-            {
+        do {
+            while (end() - pc >= (long)b.size() && memcmp(&pc[0], &b[0], b.size()) == 0) {
                 erase(pc, pc + b.size());
                 ++nFound;
             }
-        }
-        while (GetOp(pc, opcode));
+        } while (GetOp(pc, opcode));
         return nFound;
     }
     int Find(opcodetype op) const
@@ -709,12 +676,10 @@ public:
         opcodetype opcode;
         std::vector<unsigned char> vch;
         const_iterator pc = begin();
-        while (pc < end())
-        {
+        while (pc < end()) {
             if (!str.empty())
                 str += " ";
-            if (!GetOp(pc, opcode, vch))
-            {
+            if (!GetOp(pc, opcode, vch)) {
                 str += "[error]";
                 return str;
             }
@@ -752,24 +717,27 @@ private:
     // and nHeight of the enclosing transaction.
     static const unsigned int nSpecialScripts = 6;
 
-    CScript &script;
+    CScript& script;
+
 protected:
     // These check for scripts for which a special case with a shorter encoding is defined.
     // They are implemented separately from the CScript test, as these test for exact byte
     // sequence correspondences, and are more strict. For example, IsToPubKey also verifies
     // whether the public key is valid (as invalid ones cannot be represented in compressed
     // form).
-    bool IsToKeyID(CKeyID &hash) const;
-    bool IsToScriptID(CScriptID &hash) const;
-    bool IsToPubKey(CPubKey &pubkey) const;
+    bool IsToKeyID(CKeyID& hash) const;
+    bool IsToScriptID(CScriptID& hash) const;
+    bool IsToPubKey(CPubKey& pubkey) const;
 
-    bool Compress(std::vector<unsigned char> &out) const;
+    bool Compress(std::vector<unsigned char>& out) const;
     unsigned int GetSpecialSize(unsigned int nSize) const;
-    bool Decompress(unsigned int nSize, const std::vector<unsigned char> &out);
-public:
-    CScriptCompressor(CScript &scriptIn) : script(scriptIn) { }
+    bool Decompress(unsigned int nSize, const std::vector<unsigned char>& out);
 
-    unsigned int GetSerializeSize(int nType, int nVersion) const {
+public:
+    CScriptCompressor(CScript& scriptIn) : script(scriptIn) {}
+
+    unsigned int GetSerializeSize(int nType, int nVersion) const
+    {
         std::vector<unsigned char> compr;
         if (Compress(compr))
             return compr.size();
@@ -777,8 +745,9 @@ public:
         return script.size() + VARINT(nSize).GetSerializeSize(nType, nVersion);
     }
 
-    template<typename Stream>
-    void Serialize(Stream &s, int nType, int nVersion) const {
+    template <typename Stream>
+    void Serialize(Stream& s, int nType, int nVersion) const
+    {
         std::vector<unsigned char> compr;
         if (Compress(compr)) {
             s << CFlatData(compr);
@@ -789,8 +758,9 @@ public:
         s << CFlatData(script);
     }
 
-    template<typename Stream>
-    void Unserialize(Stream &s, int nType, int nVersion) {
+    template <typename Stream>
+    void Unserialize(Stream& s, int nType, int nVersion)
+    {
         unsigned int nSize = 0;
         s >> VARINT(nSize);
         if (nSize < nSpecialScripts) {
@@ -805,8 +775,8 @@ public:
     }
 };
 
-bool IsCanonicalPubKey(const std::vector<unsigned char> &vchPubKey, unsigned int flags);
-bool IsCanonicalSignature(const std::vector<unsigned char> &vchSig, unsigned int flags);
+bool IsCanonicalPubKey(const std::vector<unsigned char>& vchPubKey, unsigned int flags);
+bool IsCanonicalSignature(const std::vector<unsigned char>& vchSig, unsigned int flags);
 
 bool EvalScript(std::vector<std::vector<unsigned char> >& stack, const CScript& script, const CTransaction& txTo, unsigned int nIn, unsigned int flags, int nHashType);
 bool Solver(const CScript& scriptPubKey, txnouttype& typeRet, std::vector<std::vector<unsigned char> >& vSolutionsRet);
@@ -814,11 +784,11 @@ int ScriptSigArgsExpected(txnouttype t, const std::vector<std::vector<unsigned c
 bool IsStandard(const CScript& scriptPubKey, txnouttype& whichType);
 isminetype IsMine(const CKeyStore& keystore, const CScript& scriptPubKey);
 isminetype IsMine(const CKeyStore& keystore, const CTxDestination& dest);
-void ExtractAffectedKeys(const CKeyStore &keystore, const CScript& scriptPubKey, std::vector<CKeyID> &vKeys);
+void ExtractAffectedKeys(const CKeyStore& keystore, const CScript& scriptPubKey, std::vector<CKeyID>& vKeys);
 bool ExtractDestination(const CScript& scriptPubKey, CTxDestination& addressRet);
 bool ExtractDestinations(const CScript& scriptPubKey, txnouttype& typeRet, std::vector<CTxDestination>& addressRet, int& nRequiredRet);
-bool SignSignature(const CKeyStore& keystore, const CScript& fromPubKey, CMutableTransaction& txTo, unsigned int nIn, int nHashType=SIGHASH_ALL);
-bool SignSignature(const CKeyStore& keystore, const CTransaction& txFrom, CMutableTransaction& txTo, unsigned int nIn, int nHashType=SIGHASH_ALL);
+bool SignSignature(const CKeyStore& keystore, const CScript& fromPubKey, CMutableTransaction& txTo, unsigned int nIn, int nHashType = SIGHASH_ALL);
+bool SignSignature(const CKeyStore& keystore, const CTransaction& txFrom, CMutableTransaction& txTo, unsigned int nIn, int nHashType = SIGHASH_ALL);
 bool VerifyScript(const CScript& scriptSig, const CScript& scriptPubKey, const CTransaction& txTo, unsigned int nIn, unsigned int flags, int nHashType);
 
 // Given two sets of signatures for scriptPubKey, possibly with OP_0 placeholders,

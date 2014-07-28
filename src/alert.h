@@ -31,14 +31,14 @@ class CUnsignedAlert
 {
 public:
     int nVersion;
-    int64_t nRelayUntil;      // when newer nodes stop relaying to newer nodes
+    int64_t nRelayUntil; // when newer nodes stop relaying to newer nodes
     int64_t nExpiration;
     int nID;
     int nCancel;
     std::set<int> setCancel;
-    int nMinVer;            // lowest version inclusive
-    int nMaxVer;            // highest version inclusive
-    std::set<std::string> setSubVer;  // empty matches all
+    int nMinVer;                     // lowest version inclusive
+    int nMaxVer;                     // highest version inclusive
+    std::set<std::string> setSubVer; // empty matches all
     int nPriority;
 
     // Actions
@@ -46,8 +46,7 @@ public:
     std::string strStatusBar;
     std::string strReserved;
 
-    IMPLEMENT_SERIALIZE
-    (
+    IMPLEMENT_SERIALIZE(
         READWRITE(this->nVersion);
         nVersion = this->nVersion;
         READWRITE(nRelayUntil);
@@ -62,8 +61,7 @@ public:
 
         READWRITE(strComment);
         READWRITE(strStatusBar);
-        READWRITE(strReserved);
-    )
+        READWRITE(strReserved);)
 
     void SetNull();
 
@@ -83,11 +81,9 @@ public:
         SetNull();
     }
 
-    IMPLEMENT_SERIALIZE
-    (
+    IMPLEMENT_SERIALIZE(
         READWRITE(vchMsg);
-        READWRITE(vchSig);
-    )
+        READWRITE(vchSig);)
 
     void SetNull();
     bool IsNull() const;
@@ -103,7 +99,7 @@ public:
     /*
      * Get copy of (active) alert object by hash. Returns a null alert if it is not found.
      */
-    static CAlert getAlertByHash(const uint256 &hash);
+    static CAlert getAlertByHash(const uint256& hash);
 };
 
 #endif
