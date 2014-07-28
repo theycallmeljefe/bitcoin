@@ -22,7 +22,7 @@
 #endif
 #define FD_SETSIZE 1024 // max number of fds in fd_set
 
-#include <winsock2.h>     // Must be included before mswsock.h and windows.h
+#include <winsock2.h> // Must be included before mswsock.h and windows.h
 
 #include <mswsock.h>
 #include <windows.h>
@@ -42,21 +42,21 @@
 #endif
 
 #ifdef WIN32
-#define MSG_DONTWAIT        0
+#define MSG_DONTWAIT 0
 #else
 typedef u_int SOCKET;
 #include "errno.h"
-#define WSAGetLastError()   errno
-#define WSAEINVAL           EINVAL
-#define WSAEALREADY         EALREADY
-#define WSAEWOULDBLOCK      EWOULDBLOCK
-#define WSAEMSGSIZE         EMSGSIZE
-#define WSAEINTR            EINTR
-#define WSAEINPROGRESS      EINPROGRESS
-#define WSAEADDRINUSE       EADDRINUSE
-#define WSAENOTSOCK         EBADF
-#define INVALID_SOCKET      (SOCKET)(~0)
-#define SOCKET_ERROR        -1
+#define WSAGetLastError() errno
+#define WSAEINVAL EINVAL
+#define WSAEALREADY EALREADY
+#define WSAEWOULDBLOCK EWOULDBLOCK
+#define WSAEMSGSIZE EMSGSIZE
+#define WSAEINTR EINTR
+#define WSAEINPROGRESS EINPROGRESS
+#define WSAEADDRINUSE EADDRINUSE
+#define WSAENOTSOCK EBADF
+#define INVALID_SOCKET (SOCKET)(~0)
+#define SOCKET_ERROR -1
 #endif
 
 #endif
