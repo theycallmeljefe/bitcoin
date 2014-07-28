@@ -12,20 +12,21 @@
 #include <string>
 #include <vector>
 
-class uint_error : public std::runtime_error {
+class uint_error : public std::runtime_error
+{
 public:
     explicit uint_error(const std::string& str) : std::runtime_error(str) {}
 };
 
 /** Template base class for unsigned big integers. */
-template<unsigned int BITS>
+template <unsigned int BITS>
 class base_uint
 {
 protected:
-    enum { WIDTH=BITS/32 };
+    enum { WIDTH = BITS / 32 };
     uint32_t pn[WIDTH];
-public:
 
+public:
     base_uint()
     {
         for (int i = 0; i < WIDTH; i++)
@@ -133,8 +134,7 @@ public:
     base_uint& operator+=(const base_uint& b)
     {
         uint64_t carry = 0;
-        for (int i = 0; i < WIDTH; i++)
-        {
+        for (int i = 0; i < WIDTH; i++) {
             uint64_t n = carry + pn[i] + b.pn[i];
             pn[i] = n & 0xffffffff;
             carry = n >> 32;
@@ -172,7 +172,7 @@ public:
     {
         // prefix operator
         int i = 0;
-        while (++pn[i] == 0 && i < WIDTH-1)
+        while (++pn[i] == 0 && i < WIDTH - 1)
             i++;
         return *this;
     }
@@ -189,7 +189,7 @@ public:
     {
         // prefix operator
         int i = 0;
-        while (--pn[i] == (uint32_t)-1 && i < WIDTH-1)
+        while (--pn[i] == (uint32_t)-1 && i < WIDTH - 1)
             i++;
         return *this;
     }
@@ -211,8 +211,7 @@ public:
     friend inline const base_uint operator/(const base_uint& a, const base_uint& b) { return base_uint(a) /= b; }
     friend inline const base_uint operator|(const base_uint& a, const base_uint& b) { return base_uint(a) |= b; }
     friend inline const base_uint operator&(const base_uint& a, const base_uint& b) { return base_uint(a) &= b; }
-    friend inline const base_uint operator^(const base_uint& a, const base_uint& b) { return base_uint(a) ^= b; }
-    friend inline const base_uint operator>>(const base_uint& a, int shift) { return base_uint(a) >>= shift; }
+    friend inline const base_uint operator^(const base_uint& a, const base_uint& b) { return base_uint(a) ^= b; } friend inline const base_uint operator>>(const base_uint& a, int shift) { return base_uint(a) >>= shift; }
     friend inline const base_uint operator<<(const base_uint& a, int shift) { return base_uint(a) <<= shift; }
     friend inline const base_uint operator*(const base_uint& a, uint32_t b) { return base_uint(a) *= b; }
     friend inline bool operator==(const base_uint& a, const base_uint& b) { return a.CompareTo(b) == 0; }
@@ -269,13 +268,13 @@ public:
         return sizeof(pn);
     }
 
-    template<typename Stream>
+    template <typename Stream>
     void Serialize(Stream& s, int nType, int nVersion) const
     {
         s.write((char*)pn, sizeof(pn));
     }
 
-    template<typename Stream>
+    template <typename Stream>
     void Unserialize(Stream& s, int nType, int nVersion)
     {
         s.read((char*)pn, sizeof(pn));
@@ -283,7 +282,8 @@ public:
 };
 
 /** 160-bit unsigned big integer. */
-class uint160 : public base_uint<160> {
+class uint160 : public base_uint<160>
+{
 public:
     uint160() {}
     uint160(const base_uint<160>& b) : base_uint<160>(b) {}
@@ -293,7 +293,8 @@ public:
 };
 
 /** 256-bit unsigned big integer. */
-class uint256 : public base_uint<256> {
+class uint256 : public base_uint<256>
+{
 public:
     uint256() {}
     uint256(const base_uint<256>& b) : base_uint<256>(b) {}
@@ -320,7 +321,7 @@ public:
     // targets, which are unsigned 256bit quantities.  Thus, all the
     // complexities of the sign bit and using base 256 are probably an
     // implementation accident.
-    uint256& SetCompact(uint32_t nCompact, bool *pfNegative = NULL, bool *pfOverflow = NULL);
+    uint256& SetCompact(uint32_t nCompact, bool* pfNegative = NULL, bool* pfOverflow = NULL);
     uint32_t GetCompact(bool fNegative = false) const;
 
     uint64_t GetHash(const uint256& salt) const;
