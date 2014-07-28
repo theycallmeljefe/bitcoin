@@ -37,14 +37,14 @@ class uint256;
 static const int64_t COIN = 100000000;
 static const int64_t CENT = 1000000;
 
-#define BEGIN(a)            ((char*)&(a))
-#define END(a)              ((char*)&((&(a))[1]))
-#define UBEGIN(a)           ((unsigned char*)&(a))
-#define UEND(a)             ((unsigned char*)&((&(a))[1]))
-#define ARRAYLEN(array)     (sizeof(array)/sizeof((array)[0]))
+#define BEGIN(a) ((char*)&(a))
+#define END(a) ((char*)&((&(a))[1]))
+#define UBEGIN(a) ((unsigned char*)&(a))
+#define UEND(a) ((unsigned char*)&((&(a))[1]))
+#define ARRAYLEN(array) (sizeof(array) / sizeof((array)[0]))
 
 // This is needed because the foreach macro can't get over the comma in pair<t1, t2>
-#define PAIRTYPE(t1, t2)    std::pair<t1, t2>
+#define PAIRTYPE(t1, t2) std::pair<t1, t2>
 
 // Align by increasing pointer, must have extra space at end of buffer
 template <size_t nBytes, typename T>
@@ -56,19 +56,19 @@ T* alignup(T* p)
         size_t n;
     } u;
     u.ptr = p;
-    u.n = (u.n + (nBytes-1)) & ~(nBytes-1);
+    u.n = (u.n + (nBytes - 1)) & ~(nBytes - 1);
     return u.ptr;
 }
 
 #ifdef WIN32
-#define MSG_DONTWAIT        0
+#define MSG_DONTWAIT 0
 
 #ifndef S_IRUSR
-#define S_IRUSR             0400
-#define S_IWUSR             0200
+#define S_IRUSR 0400
+#define S_IWUSR 0200
 #endif
 #else
-#define MAX_PATH            1024
+#define MAX_PATH 1024
 #endif
 // As Solaris does not have the MSG_NOSIGNAL flag for send(2) syscall, it is defined as 0
 #if !defined(HAVE_MSG_NOSIGNAL) && !defined(MSG_NOSIGNAL)
@@ -106,7 +106,7 @@ void SetupEnvironment();
 /* Return true if log accepts specified category */
 bool LogAcceptCategory(const char* category);
 /* Send a string to the log output */
-int LogPrintStr(const std::string &str);
+int LogPrintStr(const std::string& str);
 
 #define strprintf tfm::format
 #define LogPrintf(...) LogPrint(NULL, __VA_ARGS__)
@@ -114,20 +114,19 @@ int LogPrintStr(const std::string &str);
 /* When we switch to C++11, this can be switched to variadic templates instead
  * of this macro-based construction (see tinyformat.h).
  */
-#define MAKE_ERROR_AND_LOG_FUNC(n)                                        \
-    /*   Print to debug.log if -debug=category switch is given OR category is NULL. */ \
-    template<TINYFORMAT_ARGTYPES(n)>                                          \
-    static inline int LogPrint(const char* category, const char* format, TINYFORMAT_VARARGS(n))  \
-    {                                                                         \
-        if(!LogAcceptCategory(category)) return 0;                            \
-        return LogPrintStr(tfm::format(format, TINYFORMAT_PASSARGS(n))); \
-    }                                                                         \
-    /*   Log error and return false */                                        \
-    template<TINYFORMAT_ARGTYPES(n)>                                          \
-    static inline bool error(const char* format, TINYFORMAT_VARARGS(n))                     \
-    {                                                                         \
-        LogPrintStr("ERROR: " + tfm::format(format, TINYFORMAT_PASSARGS(n)) + "\n"); \
-        return false;                                                         \
+#define MAKE_ERROR_AND_LOG_FUNC(n)                                                                                                \
+    /*   Print to debug.log if -debug=category switch is given OR category is NULL. */                                            \
+    template <TINYFORMAT_ARGTYPES(n)> static inline int LogPrint(const char* category, const char* format, TINYFORMAT_VARARGS(n)) \
+    {                                                                                                                             \
+        if (!LogAcceptCategory(category))                                                                                         \
+            return 0;                                                                                                             \
+        return LogPrintStr(tfm::format(format, TINYFORMAT_PASSARGS(n)));                                                          \
+    }                                                                                                                             \
+    /*   Log error and return false */                                                                                            \
+    template <TINYFORMAT_ARGTYPES(n)> static inline bool error(const char* format, TINYFORMAT_VARARGS(n))                         \
+    {                                                                                                                             \
+        LogPrintStr("ERROR: " + tfm::format(format, TINYFORMAT_PASSARGS(n)) + "\n");                                              \
+        return false;                                                                                                             \
     }
 
 TINYFORMAT_FOREACH_ARGNUM(MAKE_ERROR_AND_LOG_FUNC)
@@ -137,7 +136,8 @@ TINYFORMAT_FOREACH_ARGNUM(MAKE_ERROR_AND_LOG_FUNC)
  */
 static inline int LogPrint(const char* category, const char* format)
 {
-    if(!LogAcceptCategory(category)) return 0;
+    if (!LogAcceptCategory(category))
+        return 0;
     return LogPrintStr(format);
 }
 static inline bool error(const char* format)
@@ -147,7 +147,7 @@ static inline bool error(const char* format)
 }
 
 void PrintExceptionContinue(std::exception* pex, const char* pszThread);
-std::string FormatMoney(int64_t n, bool fPlus=false);
+std::string FormatMoney(int64_t n, bool fPlus = false);
 bool ParseMoney(const std::string& str, int64_t& nRet);
 bool ParseMoney(const char* pszIn, int64_t& nRet);
 std::string SanitizeString(const std::string& str);
@@ -163,19 +163,19 @@ std::vector<unsigned char> DecodeBase32(const char* p, bool* pfInvalid = NULL);
 std::string DecodeBase32(const std::string& str);
 std::string EncodeBase32(const unsigned char* pch, size_t len);
 std::string EncodeBase32(const std::string& str);
-void ParseParameters(int argc, const char*const argv[]);
-void FileCommit(FILE *fileout);
-bool TruncateFile(FILE *file, unsigned int length);
+void ParseParameters(int argc, const char* const argv[]);
+void FileCommit(FILE* fileout);
+bool TruncateFile(FILE* file, unsigned int length);
 int RaiseFileDescriptorLimit(int nMinFD);
-void AllocateFileRange(FILE *file, unsigned int offset, unsigned int length);
+void AllocateFileRange(FILE* file, unsigned int offset, unsigned int length);
 bool RenameOver(boost::filesystem::path src, boost::filesystem::path dest);
 bool TryCreateDirectory(const boost::filesystem::path& p);
 boost::filesystem::path GetDefaultDataDir();
-const boost::filesystem::path &GetDataDir(bool fNetSpecific = true);
+const boost::filesystem::path& GetDataDir(bool fNetSpecific = true);
 boost::filesystem::path GetConfigFile();
 boost::filesystem::path GetPidFile();
 #ifndef WIN32
-void CreatePidFile(const boost::filesystem::path &path, pid_t pid);
+void CreatePidFile(const boost::filesystem::path& path, pid_t pid);
 #endif
 void ReadConfigFile(std::map<std::string, std::string>& mapSettingsRet, std::map<std::string, std::vector<std::string> >& mapMultiSettingsRet);
 #ifdef WIN32
@@ -227,7 +227,7 @@ inline int atoi(const std::string& str)
  * @returns true if the entire string could be parsed as valid integer,
  *   false if not the entire string could be parsed or when overflow or underflow occured.
  */
-bool ParseInt32(const std::string& str, int32_t *out);
+bool ParseInt32(const std::string& str, int32_t* out);
 
 inline int roundint(double d)
 {
@@ -244,27 +244,25 @@ inline int64_t abs64(int64_t n)
     return (n >= 0 ? n : -n);
 }
 
-template<typename T>
-std::string HexStr(const T itbegin, const T itend, bool fSpaces=false)
+template <typename T>
+std::string HexStr(const T itbegin, const T itend, bool fSpaces = false)
 {
     std::string rv;
-    static const char hexmap[16] = { '0', '1', '2', '3', '4', '5', '6', '7',
-                                     '8', '9', 'a', 'b', 'c', 'd', 'e', 'f' };
-    rv.reserve((itend-itbegin)*3);
-    for(T it = itbegin; it < itend; ++it)
-    {
+    static const char hexmap[16] = {'0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f'};
+    rv.reserve((itend - itbegin) * 3);
+    for (T it = itbegin; it < itend; ++it) {
         unsigned char val = (unsigned char)(*it);
-        if(fSpaces && it != itbegin)
+        if (fSpaces && it != itbegin)
             rv.push_back(' ');
-        rv.push_back(hexmap[val>>4]);
-        rv.push_back(hexmap[val&15]);
+        rv.push_back(hexmap[val >> 4]);
+        rv.push_back(hexmap[val & 15]);
     }
 
     return rv;
 }
 
-template<typename T>
-inline std::string HexStr(const T& vch, bool fSpaces=false)
+template <typename T>
+inline std::string HexStr(const T& vch, bool fSpaces = false)
 {
     return HexStr(vch.begin(), vch.end(), fSpaces);
 }
@@ -272,18 +270,18 @@ inline std::string HexStr(const T& vch, bool fSpaces=false)
 /** Format a paragraph of text to a fixed width, adding spaces for
  * indentation to any added line.
  */
-std::string FormatParagraph(const std::string in, size_t width=79, size_t indent=0);
+std::string FormatParagraph(const std::string in, size_t width = 79, size_t indent = 0);
 
 inline int64_t GetTimeMillis()
 {
     return (boost::posix_time::ptime(boost::posix_time::microsec_clock::universal_time()) -
-            boost::posix_time::ptime(boost::gregorian::date(1970,1,1))).total_milliseconds();
+            boost::posix_time::ptime(boost::gregorian::date(1970, 1, 1))).total_milliseconds();
 }
 
 inline int64_t GetTimeMicros()
 {
     return (boost::posix_time::ptime(boost::posix_time::microsec_clock::universal_time()) -
-            boost::posix_time::ptime(boost::gregorian::date(1970,1,1))).total_microseconds();
+            boost::posix_time::ptime(boost::gregorian::date(1970, 1, 1))).total_microseconds();
 }
 
 std::string DateTimeStrFormat(const char* pszFormat, int64_t nTime);
@@ -350,25 +348,27 @@ bool SoftSetBoolArg(const std::string& strArg, bool fValue);
 template <typename T>
 bool TimingResistantEqual(const T& a, const T& b)
 {
-    if (b.size() == 0) return a.size() == 0;
+    if (b.size() == 0)
+        return a.size() == 0;
     size_t accumulator = a.size() ^ b.size();
     for (size_t i = 0; i < a.size(); i++)
-        accumulator |= a[i] ^ b[i%b.size()];
+        accumulator |= a[i] ^ b[i % b.size()];
     return accumulator == 0;
 }
 
 /** Median filter over a stream of values.
  * Returns the median of the last N numbers
  */
-template <typename T> class CMedianFilter
+template <typename T>
+class CMedianFilter
 {
 private:
     std::vector<T> vValues;
     std::vector<T> vSorted;
     unsigned int nSize;
+
 public:
-    CMedianFilter(unsigned int size, T initial_value):
-        nSize(size)
+    CMedianFilter(unsigned int size, T initial_value) : nSize(size)
     {
         vValues.reserve(size);
         vValues.push_back(initial_value);
@@ -377,8 +377,7 @@ public:
 
     void input(T value)
     {
-        if(vValues.size() == nSize)
-        {
+        if (vValues.size() == nSize) {
             vValues.erase(vValues.begin());
         }
         vValues.push_back(value);
@@ -391,14 +390,13 @@ public:
     T median() const
     {
         int size = vSorted.size();
-        assert(size>0);
-        if(size & 1) // Odd number of elements
+        assert(size > 0);
+        if (size & 1) // Odd number of elements
         {
-            return vSorted[size/2];
-        }
-        else // Even number of elements
+            return vSorted[size / 2];
+        } else // Even number of elements
         {
-            return (vSorted[size/2-1] + vSorted[size/2]) / 2;
+            return (vSorted[size / 2 - 1] + vSorted[size / 2]) / 2;
         }
     }
 
@@ -407,7 +405,7 @@ public:
         return vValues.size();
     }
 
-    std::vector<T> sorted () const
+    std::vector<T> sorted() const
     {
         return vSorted;
     }
@@ -424,15 +422,15 @@ inline void SetThreadPriority(int nPriority)
 #ifndef PRIO_MAX
 #define PRIO_MAX 20
 #endif
-#define THREAD_PRIORITY_LOWEST          PRIO_MAX
-#define THREAD_PRIORITY_BELOW_NORMAL    2
-#define THREAD_PRIORITY_NORMAL          0
-#define THREAD_PRIORITY_ABOVE_NORMAL    (-2)
+#define THREAD_PRIORITY_LOWEST PRIO_MAX
+#define THREAD_PRIORITY_BELOW_NORMAL 2
+#define THREAD_PRIORITY_NORMAL 0
+#define THREAD_PRIORITY_ABOVE_NORMAL (-2)
 
 inline void SetThreadPriority(int nPriority)
 {
-    // It's unclear if it's even possible to change thread priorities on Linux,
-    // but we really and truly need it for the generation threads.
+// It's unclear if it's even possible to change thread priorities on Linux,
+// but we really and truly need it for the generation threads.
 #ifdef PRIO_THREAD
     setpriority(PRIO_THREAD, 0, nPriority);
 #else
@@ -446,7 +444,7 @@ void RenameThread(const char* name);
 inline uint32_t ByteReverse(uint32_t value)
 {
     value = ((value & 0xFF00FF00) >> 8) | ((value & 0x00FF00FF) << 8);
-    return (value<<16) | (value>>16);
+    return (value << 16) | (value >> 16);
 }
 
 // Standard wrapper for do-something-forever thread functions.
@@ -456,54 +454,45 @@ inline uint32_t ByteReverse(uint32_t value)
 // or maybe:
 //    boost::function<void()> f = boost::bind(&FunctionWithArg, argument);
 //    threadGroup.create_thread(boost::bind(&LoopForever<boost::function<void()> >, "nothing", f, milliseconds));
-template <typename Callable> void LoopForever(const char* name,  Callable func, int64_t msecs)
+template <typename Callable>
+void LoopForever(const char* name, Callable func, int64_t msecs)
 {
     std::string s = strprintf("bitcoin-%s", name);
     RenameThread(s.c_str());
     LogPrintf("%s thread start\n", name);
-    try
-    {
-        while (1)
-        {
+    try {
+        while (1) {
             MilliSleep(msecs);
             func();
         }
-    }
-    catch (boost::thread_interrupted)
-    {
+    } catch (boost::thread_interrupted) {
         LogPrintf("%s thread stop\n", name);
         throw;
-    }
-    catch (std::exception& e) {
+    } catch (std::exception& e) {
         PrintExceptionContinue(&e, name);
         throw;
-    }
-    catch (...) {
+    } catch (...) {
         PrintExceptionContinue(NULL, name);
         throw;
     }
 }
 // .. and a wrapper that just calls func once
-template <typename Callable> void TraceThread(const char* name,  Callable func)
+template <typename Callable>
+void TraceThread(const char* name, Callable func)
 {
     std::string s = strprintf("bitcoin-%s", name);
     RenameThread(s.c_str());
-    try
-    {
+    try {
         LogPrintf("%s thread start\n", name);
         func();
         LogPrintf("%s thread exit\n", name);
-    }
-    catch (boost::thread_interrupted)
-    {
+    } catch (boost::thread_interrupted) {
         LogPrintf("%s thread interrupt\n", name);
         throw;
-    }
-    catch (std::exception& e) {
+    } catch (std::exception& e) {
         PrintExceptionContinue(&e, name);
         throw;
-    }
-    catch (...) {
+    } catch (...) {
         PrintExceptionContinue(NULL, name);
         throw;
     }
