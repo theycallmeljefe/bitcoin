@@ -28,15 +28,14 @@ class CTxMemPoolEntry
 {
 private:
     CTransaction tx;
-    int64_t nFee; // Cached to avoid expensive parent-transaction lookups
-    size_t nTxSize; // ... and avoid recomputing tx size
-    int64_t nTime; // Local time when entering the mempool
-    double dPriority; // Priority when entering the mempool
+    int64_t nFee;         // Cached to avoid expensive parent-transaction lookups
+    size_t nTxSize;       // ... and avoid recomputing tx size
+    int64_t nTime;        // Local time when entering the mempool
+    double dPriority;     // Priority when entering the mempool
     unsigned int nHeight; // Chain height when entering the mempool
 
 public:
-    CTxMemPoolEntry(const CTransaction& _tx, int64_t _nFee,
-                    int64_t _nTime, double _dPriority, unsigned int _nHeight);
+    CTxMemPoolEntry(const CTransaction& _tx, int64_t _nFee, int64_t _nTime, double _dPriority, unsigned int _nHeight);
     CTxMemPoolEntry();
     CTxMemPoolEntry(const CTxMemPoolEntry& other);
 
@@ -84,23 +83,22 @@ public:
      * all inputs are in the mapNextTx array). If sanity-checking is turned off,
      * check does nothing.
      */
-    void check(CCoinsViewCache *pcoins) const;
+    void check(CCoinsViewCache* pcoins) const;
     void setSanityCheck(bool _fSanityCheck) { fSanityCheck = _fSanityCheck; }
 
-    bool addUnchecked(const uint256& hash, const CTxMemPoolEntry &entry);
-    void remove(const CTransaction &tx, std::list<CTransaction>& removed, bool fRecursive = false);
-    void removeConflicts(const CTransaction &tx, std::list<CTransaction>& removed);
-    void removeForBlock(const std::vector<CTransaction>& vtx, unsigned int nBlockHeight,
-                        std::list<CTransaction>& conflicts);
+    bool addUnchecked(const uint256& hash, const CTxMemPoolEntry& entry);
+    void remove(const CTransaction& tx, std::list<CTransaction>& removed, bool fRecursive = false);
+    void removeConflicts(const CTransaction& tx, std::list<CTransaction>& removed);
+    void removeForBlock(const std::vector<CTransaction>& vtx, unsigned int nBlockHeight, std::list<CTransaction>& conflicts);
     void clear();
     void queryHashes(std::vector<uint256>& vtxid);
-    void pruneSpent(const uint256& hash, CCoins &coins);
+    void pruneSpent(const uint256& hash, CCoins& coins);
     unsigned int GetTransactionsUpdated() const;
     void AddTransactionsUpdated(unsigned int n);
 
     /** Affect CreateNewBlock prioritisation of transactions */
     void PrioritiseTransaction(const uint256 hash, const std::string strHash, double dPriorityDelta, int64_t nFeeDelta);
-    void ApplyDeltas(const uint256 hash, double &dPriorityDelta, int64_t &nFeeDelta);
+    void ApplyDeltas(const uint256 hash, double& dPriorityDelta, int64_t& nFeeDelta);
     void ClearPrioritisation(const uint256 hash);
 
     unsigned long size()
@@ -133,12 +131,12 @@ public:
 class CCoinsViewMemPool : public CCoinsViewBacked
 {
 protected:
-    CTxMemPool &mempool;
+    CTxMemPool& mempool;
 
 public:
-    CCoinsViewMemPool(CCoinsView &baseIn, CTxMemPool &mempoolIn);
-    bool GetCoins(const uint256 &txid, CCoins &coins);
-    bool HaveCoins(const uint256 &txid);
+    CCoinsViewMemPool(CCoinsView& baseIn, CTxMemPool& mempoolIn);
+    bool GetCoins(const uint256& txid, CCoins& coins);
+    bool HaveCoins(const uint256& txid);
 };
 
 #endif /* BITCOIN_TXMEMPOOL_H */
