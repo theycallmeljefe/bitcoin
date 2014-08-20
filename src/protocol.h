@@ -38,13 +38,11 @@ class CMessageHeader
         IMPLEMENT_SERIALIZE(CMessageHeader);
 
         template <typename Stream, typename Operation>
-        inline size_t SerializationOp(Stream& s, Operation ser_action, int nType, int nVersion) {
-            size_t nSerSize = 0;
+        inline void SerializationOp(Stream& s, Operation ser_action, int nType, int nVersion) {
             READWRITE(FLATDATA(pchMessageStart));
             READWRITE(FLATDATA(pchCommand));
             READWRITE(nMessageSize);
             READWRITE(nChecksum);
-            return nSerSize;
         }
 
     // TODO: make private (improves encapsulation)
@@ -90,9 +88,8 @@ class CAddress : public CService
         IMPLEMENT_SERIALIZE(CAddress);
 
         template <typename Stream, typename Operation>
-        inline size_t SerializationOp(Stream& s, Operation ser_action, int nType, int nVersion) {
-            size_t nSerSize = 0;
-            bool fRead = boost::is_same<Operation, CSerActionUnserialize>();
+        inline void SerializationOp(Stream& s, Operation ser_action, int nType, int nVersion) {
+            bool fRead = ser_action.ForRead();
 
             if (fRead)
                 Init();
@@ -103,8 +100,6 @@ class CAddress : public CService
             READWRITE(nTime);
             READWRITE(nServices);
             READWRITE(*(CService*)this);
-
-            return nSerSize;
         }
 
         void print() const;
@@ -131,11 +126,9 @@ class CInv
         IMPLEMENT_SERIALIZE(CInv);
 
         template <typename Stream, typename Operation>
-        inline size_t SerializationOp(Stream& s, Operation ser_action, int nType, int nVersion) {
-            size_t nSerSize = 0;
+        inline void SerializationOp(Stream& s, Operation ser_action, int nType, int nVersion) {
             READWRITE(type);
             READWRITE(hash);
-            return nSerSize;
         }
 
         friend bool operator<(const CInv& a, const CInv& b);

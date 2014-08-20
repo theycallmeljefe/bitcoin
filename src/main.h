@@ -201,11 +201,9 @@ struct CDiskBlockPos
     IMPLEMENT_SERIALIZE(CDiskBlockPos);
 
     template <typename Stream, typename Operation>
-    inline size_t SerializationOp(Stream& s, Operation ser_action, int nType, int nVersion) {
-        size_t nSerSize = 0;
+    inline void SerializationOp(Stream& s, Operation ser_action, int nType, int nVersion) {
         READWRITE(VARINT(nFile));
         READWRITE(VARINT(nPos));
-        return nSerSize;
     }
 
     CDiskBlockPos() {
@@ -236,11 +234,9 @@ struct CDiskTxPos : public CDiskBlockPos
     IMPLEMENT_SERIALIZE(CDiskTxPos);
 
     template <typename Stream, typename Operation>
-    inline size_t SerializationOp(Stream& s, Operation ser_action, int nType, int nVersion) {
-        size_t nSerSize = 0;
+    inline void SerializationOp(Stream& s, Operation ser_action, int nType, int nVersion) {
         READWRITE(*(CDiskBlockPos*)this);
         READWRITE(VARINT(nTxOffset));
-        return nSerSize;
     }
 
     CDiskTxPos(const CDiskBlockPos &blockIn, unsigned int nTxOffsetIn) : CDiskBlockPos(blockIn.nFile, blockIn.nPos), nTxOffset(nTxOffsetIn) {
@@ -321,10 +317,8 @@ public:
     IMPLEMENT_SERIALIZE(CBlockUndo);
 
     template <typename Stream, typename Operation>
-    inline size_t SerializationOp(Stream& s, Operation ser_action, int nType, int nVersion) {
-        size_t nSerSize = 0;
+    inline void SerializationOp(Stream& s, Operation ser_action, int nType, int nVersion) {
         READWRITE(vtxundo);
-        return nSerSize;
     }
 
     bool WriteToDisk(CDiskBlockPos &pos, const uint256 &hashBlock)
@@ -451,16 +445,12 @@ public:
     IMPLEMENT_SERIALIZE(CMerkleTx);
 
     template <typename Stream, typename Operation>
-    inline size_t SerializationOp(Stream& s, Operation ser_action, int nType, int nVersion) {
-        size_t nSerSize = 0;
-
-        nSerSize += SerReadWrite(s, *(CTransaction*)this, nType, nVersion, ser_action);
+    inline void SerializationOp(Stream& s, Operation ser_action, int nType, int nVersion) {
+        READWRITE(*(CTransaction*)this);
         nVersion = this->nVersion;
         READWRITE(hashBlock);
         READWRITE(vMerkleBranch);
         READWRITE(nIndex);
-
-        return nSerSize;
     }
 
     int SetMerkleBranch(const CBlock* pblock=NULL);
@@ -550,9 +540,8 @@ public:
     IMPLEMENT_SERIALIZE(CPartialMerkleTree);
 
     template <typename Stream, typename Operation>
-    inline size_t SerializationOp(Stream& s, Operation ser_action, int nType, int nVersion) {
-        size_t nSerSize = 0;
-        bool fRead = boost::is_same<Operation, CSerActionUnserialize>();
+    inline void SerializationOp(Stream& s, Operation ser_action, int nType, int nVersion) {
+        bool fRead = ser_action.ForRead();
 
         READWRITE(nTransactions);
         READWRITE(vHash);
@@ -569,8 +558,6 @@ public:
                 vBytes[p / 8] |= vBits[p] << (p % 8);
             READWRITE(vBytes);
         }
-
-        return nSerSize;
     }
 
     // Construct a partial merkle tree from a list of transaction id's, and a mask that selects a subset of them
@@ -630,9 +617,7 @@ public:
     IMPLEMENT_SERIALIZE(CBlockFileInfo);
 
     template <typename Stream, typename Operation>
-    inline size_t SerializationOp(Stream& s, Operation ser_action, int nType, int nVersion) {
-        size_t nSerSize = 0;
-
+    inline void SerializationOp(Stream& s, Operation ser_action, int nType, int nVersion) {
         READWRITE(VARINT(nBlocks));
         READWRITE(VARINT(nSize));
         READWRITE(VARINT(nUndoSize));
@@ -640,8 +625,6 @@ public:
         READWRITE(VARINT(nHeightLast));
         READWRITE(VARINT(nTimeFirst));
         READWRITE(VARINT(nTimeLast));
-
-        return nSerSize;
     }
 
      void SetNull() {
@@ -925,9 +908,7 @@ public:
     IMPLEMENT_SERIALIZE(CDiskBlockIndex);
 
     template <typename Stream, typename Operation>
-    inline size_t SerializationOp(Stream& s, Operation ser_action, int nType, int nVersion) {
-        size_t nSerSize = 0;
-
+    inline void SerializationOp(Stream& s, Operation ser_action, int nType, int nVersion) {
         if (!(nType & SER_GETHASH))
             READWRITE(VARINT(nVersion));
 
@@ -948,8 +929,6 @@ public:
         READWRITE(nTime);
         READWRITE(nBits);
         READWRITE(nNonce);
-
-        return nSerSize;
     }
 
     uint256 GetBlockHash() const
@@ -1156,11 +1135,9 @@ public:
     IMPLEMENT_SERIALIZE(CMerkleBlock);
 
     template <typename Stream, typename Operation>
-    inline size_t SerializationOp(Stream& s, Operation ser_action, int nType, int nVersion) {
-        size_t nSerSize = 0;
+    inline void SerializationOp(Stream& s, Operation ser_action, int nType, int nVersion) {
         READWRITE(header);
         READWRITE(txn);
-        return nSerSize;
     }
 };
 

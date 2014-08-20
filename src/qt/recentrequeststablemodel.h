@@ -27,9 +27,8 @@ public:
     IMPLEMENT_SERIALIZE(RecentRequestEntry);
 
     template <typename Stream, typename Operation>
-    inline size_t SerializationOp(Stream& s, Operation ser_action, int nType, int nVersion) {
-        size_t nSerSize = 0;
-        bool fRead = boost::is_same<Operation, CSerActionUnserialize>();
+    inline void SerializationOp(Stream& s, Operation ser_action, int nType, int nVersion) {
+        bool fRead = ser_action.ForRead();
 
         unsigned int nDate = date.toTime_t();
 
@@ -41,8 +40,6 @@ public:
 
         if (fRead)
             date = QDateTime::fromTime_t(nDate);
-
-        return nSerSize;
     }
 };
 
