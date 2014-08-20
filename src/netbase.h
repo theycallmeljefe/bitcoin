@@ -89,12 +89,12 @@ class CNetAddr
         friend bool operator!=(const CNetAddr& a, const CNetAddr& b);
         friend bool operator<(const CNetAddr& a, const CNetAddr& b);
 
-        IMPLEMENT_SERIALIZE
+        IMPLEMENT_SERIALIZE(CNetAddr);
 
-        template <typename T, typename Stream, typename Operation>
-        inline static size_t SerializationOp(T thisPtr, Stream& s, Operation ser_action, int nType, int nVersion) {
+        template <typename Stream, typename Operation>
+        inline size_t SerializationOp(Stream& s, Operation ser_action, int nType, int nVersion) {
             size_t nSerSize = 0;
-            READWRITE(FLATDATA(thisPtr->ip));
+            READWRITE(FLATDATA(ip));
             return nSerSize;
         }
 };
@@ -154,18 +154,17 @@ class CService : public CNetAddr
         CService(const struct in6_addr& ipv6Addr, unsigned short port);
         CService(const struct sockaddr_in6& addr);
 
-        IMPLEMENT_SERIALIZE
+        IMPLEMENT_SERIALIZE(CService);
 
-        template <typename T, typename Stream, typename Operation>
-        inline static size_t SerializationOp(T thisPtr, Stream& s, Operation ser_action, int nType, int nVersion) {
+        template <typename Stream, typename Operation>
+        inline size_t SerializationOp(Stream& s, Operation ser_action, int nType, int nVersion) {
             bool fRead = boost::is_same<Operation, CSerActionUnserialize>();
             size_t nSerSize = 0;
-            CService* pthis = const_cast<CService*>(thisPtr);
-            READWRITE(FLATDATA(thisPtr->ip));
-            unsigned short portN = htons(thisPtr->port);
+            READWRITE(FLATDATA(ip));
+            unsigned short portN = htons(port);
             READWRITE(portN);
             if (fRead)
-                 pthis->port = ntohs(portN);
+                 port = ntohs(portN);
             return nSerSize;
         }
 };

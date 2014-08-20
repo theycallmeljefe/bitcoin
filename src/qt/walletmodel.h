@@ -59,40 +59,38 @@ public:
     static const int CURRENT_VERSION = 1;
     int nVersion;
 
-    IMPLEMENT_SERIALIZE
+    IMPLEMENT_SERIALIZE(SendCoinsRecipient);
 
-    template <typename T, typename Stream, typename Operation>
-    inline static size_t SerializationOp(T thisPtr, Stream& s, Operation ser_action, int nType, int nVersion) {
+    template <typename Stream, typename Operation>
+    inline size_t SerializationOp(Stream& s, Operation ser_action, int nType, int nVersion) {
         size_t nSerSize = 0;
         bool fRead = boost::is_same<Operation, CSerActionUnserialize>();
 
-        SendCoinsRecipient* pthis = const_cast<SendCoinsRecipient*>(thisPtr);
-
-        std::string sAddress = pthis->address.toStdString();
-        std::string sLabel = pthis->label.toStdString();
-        std::string sMessage = pthis->message.toStdString();
+        std::string sAddress = address.toStdString();
+        std::string sLabel = label.toStdString();
+        std::string sMessage = message.toStdString();
         std::string sPaymentRequest;
-        if (!fRead && pthis->paymentRequest.IsInitialized())
-            pthis->paymentRequest.SerializeToString(&sPaymentRequest);
-        std::string sAuthenticatedMerchant = pthis->authenticatedMerchant.toStdString();
+        if (!fRead && paymentRequest.IsInitialized())
+            paymentRequest.SerializeToString(&sPaymentRequest);
+        std::string sAuthenticatedMerchant = authenticatedMerchant.toStdString();
 
-        READWRITE(pthis->nVersion);
-        nVersion = pthis->nVersion;
+        READWRITE(this->nVersion);
+        nVersion = this->nVersion;
         READWRITE(sAddress);
         READWRITE(sLabel);
-        READWRITE(thisPtr->amount);
+        READWRITE(amount);
         READWRITE(sMessage);
         READWRITE(sPaymentRequest);
         READWRITE(sAuthenticatedMerchant);
 
         if (fRead)
         {
-            pthis->address = QString::fromStdString(sAddress);
-            pthis->label = QString::fromStdString(sLabel);
-            pthis->message = QString::fromStdString(sMessage);
+            address = QString::fromStdString(sAddress);
+            label = QString::fromStdString(sLabel);
+            message = QString::fromStdString(sMessage);
             if (!sPaymentRequest.empty())
-                pthis->paymentRequest.parse(QByteArray::fromRawData(sPaymentRequest.data(), sPaymentRequest.size()));
-            pthis->authenticatedMerchant = QString::fromStdString(sAuthenticatedMerchant);
+                paymentRequest.parse(QByteArray::fromRawData(sPaymentRequest.data(), sPaymentRequest.size()));
+            authenticatedMerchant = QString::fromStdString(sAuthenticatedMerchant);
         }
 
         return nSerSize;

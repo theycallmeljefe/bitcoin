@@ -62,15 +62,15 @@ public:
     CBloomFilter(unsigned int nElements, double nFPRate, unsigned int nTweak, unsigned char nFlagsIn);
     CBloomFilter() : isFull(true) {}
 
-    IMPLEMENT_SERIALIZE
+    IMPLEMENT_SERIALIZE(CBloomFilter);
 
-    template <typename T, typename Stream, typename Operation>
-    inline static size_t SerializationOp(T thisPtr, Stream& s, Operation ser_action, int nType, int nVersion) {
+    template <typename Stream, typename Operation>
+    inline size_t SerializationOp(Stream& s, Operation ser_action, int nType, int nVersion) {
         size_t nSerSize = 0;
-        READWRITE(thisPtr->vData);
-        READWRITE(thisPtr->nHashFuncs);
-        READWRITE(thisPtr->nTweak);
-        READWRITE(thisPtr->nFlags);
+        READWRITE(vData);
+        READWRITE(nHashFuncs);
+        READWRITE(nTweak);
+        READWRITE(nFlags);
         return nSerSize;
     }
 

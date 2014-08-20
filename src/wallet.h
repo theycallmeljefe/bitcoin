@@ -72,15 +72,15 @@ public:
         vchPubKey = vchPubKeyIn;
     }
 
-    IMPLEMENT_SERIALIZE
+    IMPLEMENT_SERIALIZE(CKeyPool)
 
-    template <typename T, typename Stream, typename Operation>
-    inline static size_t SerializationOp(T thisPtr, Stream& s, Operation ser_action, int nType, int nVersion) {
+    template <typename Stream, typename Operation>
+    inline size_t SerializationOp(Stream& s, Operation ser_action, int nType, int nVersion) {
         size_t nSerSize = 0;
         if (!(nType & SER_GETHASH))
             READWRITE(nVersion);
-        READWRITE(thisPtr->nTime);
-        READWRITE(thisPtr->vchPubKey);
+        READWRITE(nTime);
+        READWRITE(vchPubKey);
         return nSerSize;
     }
 };
@@ -556,52 +556,51 @@ public:
         nOrderPos = -1;
     }
 
-    IMPLEMENT_SERIALIZE
+    IMPLEMENT_SERIALIZE(CWalletTx);
 
-    template <typename T, typename Stream, typename Operation>
-    inline static size_t SerializationOp(T thisPtr, Stream& s, Operation ser_action, int nType, int nVersion) {
+    template <typename Stream, typename Operation>
+    inline size_t SerializationOp(Stream& s, Operation ser_action, int nType, int nVersion) {
         size_t nSerSize = 0;
         bool fRead = boost::is_same<Operation, CSerActionUnserialize>();
 
-        CWalletTx* pthis = const_cast<CWalletTx*>(thisPtr);
         if (fRead)
-            pthis->Init(NULL);
+            Init(NULL);
         char fSpent = false;
 
         if (!fRead)
         {
-            pthis->mapValue["fromaccount"] = pthis->strFromAccount;
+            mapValue["fromaccount"] = strFromAccount;
 
-            WriteOrderPos(pthis->nOrderPos, pthis->mapValue);
+            WriteOrderPos(nOrderPos, mapValue);
 
-            if (thisPtr->nTimeSmart)
-                pthis->mapValue["timesmart"] = strprintf("%u", thisPtr->nTimeSmart);
+            if (nTimeSmart)
+                mapValue["timesmart"] = strprintf("%u", nTimeSmart);
         }
 
-        nSerSize += SerReadWrite(s, *(CMerkleTx*)thisPtr, nType, nVersion,ser_action);
+        nSerSize += SerReadWrite(s, *(CMerkleTx*)this, nType, nVersion, ser_action);
         std::vector<CMerkleTx> vUnused; // Used to be vtxPrev
         READWRITE(vUnused);
-        READWRITE(thisPtr->mapValue);
-        READWRITE(thisPtr->vOrderForm);
-        READWRITE(thisPtr->fTimeReceivedIsTxTime);
-        READWRITE(thisPtr->nTimeReceived);
-        READWRITE(thisPtr->fFromMe);
+        READWRITE(mapValue);
+        READWRITE(vOrderForm);
+        READWRITE(fTimeReceivedIsTxTime);
+        READWRITE(nTimeReceived);
+        READWRITE(fFromMe);
         READWRITE(fSpent);
 
         if (fRead)
         {
-            pthis->strFromAccount = pthis->mapValue["fromaccount"];
+            strFromAccount = this->mapValue["fromaccount"];
 
-            ReadOrderPos(pthis->nOrderPos, pthis->mapValue);
+            ReadOrderPos(this->nOrderPos, this->mapValue);
 
-            pthis->nTimeSmart = thisPtr->mapValue.count("timesmart") ? (unsigned int)atoi64(pthis->mapValue["timesmart"]) : 0;
+            nTimeSmart = mapValue.count("timesmart") ? (unsigned int)atoi64(mapValue["timesmart"]) : 0;
         }
 
-        pthis->mapValue.erase("fromaccount");
-        pthis->mapValue.erase("version");
-        pthis->mapValue.erase("spent");
-        pthis->mapValue.erase("n");
-        pthis->mapValue.erase("timesmart");
+        mapValue.erase("fromaccount");
+        mapValue.erase("version");
+        mapValue.erase("spent");
+        mapValue.erase("n");
+        mapValue.erase("timesmart");
 
         return nSerSize;
     }
@@ -862,17 +861,17 @@ public:
         nTimeExpires = nExpires;
     }
 
-    IMPLEMENT_SERIALIZE
+    IMPLEMENT_SERIALIZE(CWalletKey);
 
-    template <typename T, typename Stream, typename Operation>
-    inline static size_t SerializationOp(T thisPtr, Stream& s, Operation ser_action, int nType, int nVersion) {
+    template <typename Stream, typename Operation>
+    inline size_t SerializationOp(Stream& s, Operation ser_action, int nType, int nVersion) {
         size_t nSerSize = 0;
         if (!(nType & SER_GETHASH))
             READWRITE(nVersion);
-        READWRITE(thisPtr->vchPrivKey);
-        READWRITE(thisPtr->nTimeCreated);
-        READWRITE(thisPtr->nTimeExpires);
-        READWRITE(LIMITED_STRING(thisPtr->strComment, 65536));
+        READWRITE(vchPrivKey);
+        READWRITE(nTimeCreated);
+        READWRITE(nTimeExpires);
+        READWRITE(LIMITED_STRING(strComment, 65536));
         return nSerSize;
     }
 };
@@ -900,14 +899,14 @@ public:
         vchPubKey = CPubKey();
     }
 
-    IMPLEMENT_SERIALIZE
+    IMPLEMENT_SERIALIZE(CAccount);
 
-    template <typename T, typename Stream, typename Operation>
-    inline static size_t SerializationOp(T thisPtr, Stream& s, Operation ser_action, int nType, int nVersion) {
+    template <typename Stream, typename Operation>
+    inline size_t SerializationOp(Stream& s, Operation ser_action, int nType, int nVersion) {
         size_t nSerSize = 0;
         if (!(nType & SER_GETHASH))
             READWRITE(nVersion);
-        READWRITE(thisPtr->vchPubKey);
+        READWRITE(vchPubKey);
         return nSerSize;
     }
 };
@@ -944,53 +943,52 @@ public:
         nOrderPos = -1;
     }
 
-    IMPLEMENT_SERIALIZE
+    IMPLEMENT_SERIALIZE(CAccountingEntry);
 
-    template <typename T, typename Stream, typename Operation>
-    inline static size_t SerializationOp(T thisPtr, Stream& s, Operation ser_action, int nType, int nVersion) {
+    template <typename Stream, typename Operation>
+    inline size_t SerializationOp(Stream& s, Operation ser_action, int nType, int nVersion) {
         size_t nSerSize = 0;
         bool fRead = boost::is_same<Operation, CSerActionUnserialize>();
-        
-        CAccountingEntry& me = *const_cast<CAccountingEntry*>(thisPtr);
+
         if (!(nType & SER_GETHASH))
             READWRITE(nVersion);
         // Note: strAccount is serialized as part of the key, not here.
-        READWRITE(thisPtr->nCreditDebit);
-        READWRITE(thisPtr->nTime);
-        READWRITE(LIMITED_STRING(thisPtr->strOtherAccount, 65536));
+        READWRITE(nCreditDebit);
+        READWRITE(nTime);
+        READWRITE(LIMITED_STRING(strOtherAccount, 65536));
 
         if (!fRead)
         {
-            WriteOrderPos(thisPtr->nOrderPos, me.mapValue);
+            WriteOrderPos(nOrderPos, mapValue);
 
-            if (!(thisPtr->mapValue.empty() && thisPtr->_ssExtra.empty()))
+            if (!(mapValue.empty() && _ssExtra.empty()))
             {
                 CDataStream ss(nType, nVersion);
                 ss.insert(ss.begin(), '\0');
-                ss << thisPtr->mapValue;
-                ss.insert(ss.end(), thisPtr->_ssExtra.begin(), thisPtr->_ssExtra.end());
-                me.strComment.append(ss.str());
+                ss << mapValue;
+                ss.insert(ss.end(), _ssExtra.begin(), _ssExtra.end());
+                strComment.append(ss.str());
             }
         }
 
-        READWRITE(LIMITED_STRING(thisPtr->strComment, 65536));
+        READWRITE(LIMITED_STRING(strComment, 65536));
 
-        size_t nSepPos = thisPtr->strComment.find("\0", 0, 1);
+        size_t nSepPos = strComment.find("\0", 0, 1);
         if (fRead)
         {
-            me.mapValue.clear();
+            mapValue.clear();
             if (std::string::npos != nSepPos)
             {
-                CDataStream ss(std::vector<char>(thisPtr->strComment.begin() + nSepPos + 1, thisPtr->strComment.end()), nType, nVersion);
-                ss >> me.mapValue;
-                me._ssExtra = std::vector<char>(ss.begin(), ss.end());
+                CDataStream ss(std::vector<char>(strComment.begin() + nSepPos + 1, strComment.end()), nType, nVersion);
+                ss >> mapValue;
+                _ssExtra = std::vector<char>(ss.begin(), ss.end());
             }
-            ReadOrderPos(me.nOrderPos, me.mapValue);
+            ReadOrderPos(nOrderPos, mapValue);
         }
         if (std::string::npos != nSepPos)
-            me.strComment.erase(nSepPos);
+            strComment.erase(nSepPos);
 
-        me.mapValue.erase("n");
+        mapValue.erase("n");
 
         return nSerSize;
     }

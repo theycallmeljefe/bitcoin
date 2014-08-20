@@ -24,25 +24,23 @@ public:
     QDateTime date;
     SendCoinsRecipient recipient;
 
-    IMPLEMENT_SERIALIZE
+    IMPLEMENT_SERIALIZE(RecentRequestEntry);
 
-    template <typename T, typename Stream, typename Operation>
-    inline static size_t SerializationOp(T thisPtr, Stream& s, Operation ser_action, int nType, int nVersion) {
+    template <typename Stream, typename Operation>
+    inline size_t SerializationOp(Stream& s, Operation ser_action, int nType, int nVersion) {
         size_t nSerSize = 0;
         bool fRead = boost::is_same<Operation, CSerActionUnserialize>();
 
-        RecentRequestEntry* pthis = const_cast<RecentRequestEntry*>(thisPtr);
+        unsigned int nDate = date.toTime_t();
 
-        unsigned int nDate = thisPtr->date.toTime_t();
-
-        READWRITE(pthis->nVersion);
-        nVersion = pthis->nVersion;
-        READWRITE(thisPtr->id);
+        READWRITE(this->nVersion);
+        nVersion = this->nVersion;
+        READWRITE(id);
         READWRITE(nDate);
-        READWRITE(thisPtr->recipient);
+        READWRITE(recipient);
 
         if (fRead)
-            pthis->date = QDateTime::fromTime_t(nDate);
+            date = QDateTime::fromTime_t(nDate);
 
         return nSerSize;
     }

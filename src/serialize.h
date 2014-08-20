@@ -93,20 +93,22 @@ enum
 
 /* Implement three methods for serializable objects. These are actually wrappers over
  * "SerializationOp" template, which implements the body of each class' serialization
- * code. Adding "IMPLEMENT_SERIALIZE" in the body of the class causes these wrappers to be
- * added as members. */
-#define IMPLEMENT_SERIALIZE                                                                         \
+ * code. Adding "IMPLEMENT_SERIALIZE(T)" in the body of the class causes these wrappers to be
+ * added as members. T should be the type implementing the SerializationOp method. */
+#define IMPLEMENT_SERIALIZE(T)                                                                      \
     size_t GetSerializeSize(int nType, int nVersion) const {                                        \
         ser_streamplaceholder s;                                                                    \
-        return SerializationOp(MAKE_CONST(this), s, CSerActionGetSerializeSize(), nType, nVersion); \
+        return const_cast<T*>(static_cast<const T*>(this))->SerializationOp(                        \
+            s, CSerActionGetSerializeSize(), nType, nVersion);                                      \
     }                                                                                               \
     template<typename Stream>                                                                       \
     void Serialize(Stream& s, int nType, int nVersion) const {                                      \
-        SerializationOp(MAKE_CONST(this), s, CSerActionSerialize(), nType, nVersion);               \
+        const_cast<T*>(static_cast<const T*>(this))->SerializationOp(                               \
+            s, CSerActionSerialize(), nType, nVersion);                                             \
     }                                                                                               \
     template<typename Stream>                                                                       \
     void Unserialize(Stream& s, int nType, int nVersion) {                                          \
-        SerializationOp(this, s, CSerActionUnserialize(), nType, nVersion);                         \
+        static_cast<T*>(this)->SerializationOp(s, CSerActionUnserialize(), nType, nVersion);        \
     }
 
 
