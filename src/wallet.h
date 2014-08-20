@@ -73,12 +73,16 @@ public:
     }
 
     IMPLEMENT_SERIALIZE
-    (
+
+    template <typename T, typename Stream, typename Operation>
+    inline static size_t SerializationOp(T thisPtr, Stream& s, Operation ser_action, int nType, int nVersion) {
+        size_t nSerSize = 0;
         if (!(nType & SER_GETHASH))
             READWRITE(nVersion);
-        READWRITE(nTime);
-        READWRITE(vchPubKey);
-    )
+        READWRITE(thisPtr->nTime);
+        READWRITE(thisPtr->vchPubKey);
+        return nSerSize;
+    }
 };
 
 /** Address book data */
@@ -553,8 +557,13 @@ public:
     }
 
     IMPLEMENT_SERIALIZE
-    (
-        CWalletTx* pthis = const_cast<CWalletTx*>(this);
+
+    template <typename T, typename Stream, typename Operation>
+    inline static size_t SerializationOp(T thisPtr, Stream& s, Operation ser_action, int nType, int nVersion) {
+        size_t nSerSize = 0;
+        bool fRead = boost::is_same<Operation, CSerActionUnserialize>();
+
+        CWalletTx* pthis = const_cast<CWalletTx*>(thisPtr);
         if (fRead)
             pthis->Init(NULL);
         char fSpent = false;
@@ -565,18 +574,18 @@ public:
 
             WriteOrderPos(pthis->nOrderPos, pthis->mapValue);
 
-            if (nTimeSmart)
-                pthis->mapValue["timesmart"] = strprintf("%u", nTimeSmart);
+            if (thisPtr->nTimeSmart)
+                pthis->mapValue["timesmart"] = strprintf("%u", thisPtr->nTimeSmart);
         }
 
-        nSerSize += SerReadWrite(s, *(CMerkleTx*)this, nType, nVersion,ser_action);
+        nSerSize += SerReadWrite(s, *(CMerkleTx*)thisPtr, nType, nVersion,ser_action);
         std::vector<CMerkleTx> vUnused; // Used to be vtxPrev
         READWRITE(vUnused);
-        READWRITE(mapValue);
-        READWRITE(vOrderForm);
-        READWRITE(fTimeReceivedIsTxTime);
-        READWRITE(nTimeReceived);
-        READWRITE(fFromMe);
+        READWRITE(thisPtr->mapValue);
+        READWRITE(thisPtr->vOrderForm);
+        READWRITE(thisPtr->fTimeReceivedIsTxTime);
+        READWRITE(thisPtr->nTimeReceived);
+        READWRITE(thisPtr->fFromMe);
         READWRITE(fSpent);
 
         if (fRead)
@@ -585,7 +594,7 @@ public:
 
             ReadOrderPos(pthis->nOrderPos, pthis->mapValue);
 
-            pthis->nTimeSmart = mapValue.count("timesmart") ? (unsigned int)atoi64(pthis->mapValue["timesmart"]) : 0;
+            pthis->nTimeSmart = thisPtr->mapValue.count("timesmart") ? (unsigned int)atoi64(pthis->mapValue["timesmart"]) : 0;
         }
 
         pthis->mapValue.erase("fromaccount");
@@ -593,7 +602,9 @@ public:
         pthis->mapValue.erase("spent");
         pthis->mapValue.erase("n");
         pthis->mapValue.erase("timesmart");
-    )
+
+        return nSerSize;
+    }
 
     // make sure balances are recalculated
     void MarkDirty()
@@ -852,14 +863,18 @@ public:
     }
 
     IMPLEMENT_SERIALIZE
-    (
+
+    template <typename T, typename Stream, typename Operation>
+    inline static size_t SerializationOp(T thisPtr, Stream& s, Operation ser_action, int nType, int nVersion) {
+        size_t nSerSize = 0;
         if (!(nType & SER_GETHASH))
             READWRITE(nVersion);
-        READWRITE(vchPrivKey);
-        READWRITE(nTimeCreated);
-        READWRITE(nTimeExpires);
-        READWRITE(LIMITED_STRING(strComment, 65536));
-    )
+        READWRITE(thisPtr->vchPrivKey);
+        READWRITE(thisPtr->nTimeCreated);
+        READWRITE(thisPtr->nTimeExpires);
+        READWRITE(LIMITED_STRING(thisPtr->strComment, 65536));
+        return nSerSize;
+    }
 };
 
 
@@ -886,11 +901,15 @@ public:
     }
 
     IMPLEMENT_SERIALIZE
-    (
+
+    template <typename T, typename Stream, typename Operation>
+    inline static size_t SerializationOp(T thisPtr, Stream& s, Operation ser_action, int nType, int nVersion) {
+        size_t nSerSize = 0;
         if (!(nType & SER_GETHASH))
             READWRITE(nVersion);
-        READWRITE(vchPubKey);
-    )
+        READWRITE(thisPtr->vchPubKey);
+        return nSerSize;
+    }
 };
 
 
@@ -926,38 +945,43 @@ public:
     }
 
     IMPLEMENT_SERIALIZE
-    (
-        CAccountingEntry& me = *const_cast<CAccountingEntry*>(this);
+
+    template <typename T, typename Stream, typename Operation>
+    inline static size_t SerializationOp(T thisPtr, Stream& s, Operation ser_action, int nType, int nVersion) {
+        size_t nSerSize = 0;
+        bool fRead = boost::is_same<Operation, CSerActionUnserialize>();
+        
+        CAccountingEntry& me = *const_cast<CAccountingEntry*>(thisPtr);
         if (!(nType & SER_GETHASH))
             READWRITE(nVersion);
         // Note: strAccount is serialized as part of the key, not here.
-        READWRITE(nCreditDebit);
-        READWRITE(nTime);
-        READWRITE(LIMITED_STRING(strOtherAccount, 65536));
+        READWRITE(thisPtr->nCreditDebit);
+        READWRITE(thisPtr->nTime);
+        READWRITE(LIMITED_STRING(thisPtr->strOtherAccount, 65536));
 
         if (!fRead)
         {
-            WriteOrderPos(nOrderPos, me.mapValue);
+            WriteOrderPos(thisPtr->nOrderPos, me.mapValue);
 
-            if (!(mapValue.empty() && _ssExtra.empty()))
+            if (!(thisPtr->mapValue.empty() && thisPtr->_ssExtra.empty()))
             {
                 CDataStream ss(nType, nVersion);
                 ss.insert(ss.begin(), '\0');
-                ss << mapValue;
-                ss.insert(ss.end(), _ssExtra.begin(), _ssExtra.end());
+                ss << thisPtr->mapValue;
+                ss.insert(ss.end(), thisPtr->_ssExtra.begin(), thisPtr->_ssExtra.end());
                 me.strComment.append(ss.str());
             }
         }
 
-        READWRITE(LIMITED_STRING(strComment, 65536));
+        READWRITE(LIMITED_STRING(thisPtr->strComment, 65536));
 
-        size_t nSepPos = strComment.find("\0", 0, 1);
+        size_t nSepPos = thisPtr->strComment.find("\0", 0, 1);
         if (fRead)
         {
             me.mapValue.clear();
             if (std::string::npos != nSepPos)
             {
-                CDataStream ss(std::vector<char>(strComment.begin() + nSepPos + 1, strComment.end()), nType, nVersion);
+                CDataStream ss(std::vector<char>(thisPtr->strComment.begin() + nSepPos + 1, thisPtr->strComment.end()), nType, nVersion);
                 ss >> me.mapValue;
                 me._ssExtra = std::vector<char>(ss.begin(), ss.end());
             }
@@ -967,7 +991,9 @@ public:
             me.strComment.erase(nSepPos);
 
         me.mapValue.erase("n");
-    )
+
+        return nSerSize;
+    }
 
 private:
     std::vector<char> _ssExtra;
