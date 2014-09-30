@@ -68,10 +68,8 @@ CMutableTransaction BuildCreditingTransaction(const CScript& scriptPubKey)
     return txCredit;
 }
 
-CMutableTransaction BuildSpendingTransaction(const CScript& scriptSig, const CScript& scriptPubKey)
+CMutableTransaction BuildSpendingTransaction(const CScript& scriptSig, const CMutableTransaction& txCredit)
 {
-    CMutableTransaction txCredit = BuildCreditingTransaction(scriptPubKey);
-
     CMutableTransaction txSpend;
     txSpend.nVersion = 1;
     txSpend.nLockTime = 0;
@@ -114,7 +112,7 @@ BOOST_AUTO_TEST_CASE(script_valid)
         unsigned int scriptflags = ParseScriptFlags(test[2].get_str());
 
         CTransaction tx;
-        BOOST_CHECK_MESSAGE(VerifyScript(scriptSig, scriptPubKey, BuildSpendingTransaction(scriptSig, scriptPubKey), 0, scriptflags), strTest);
+        BOOST_CHECK_MESSAGE(VerifyScript(scriptSig, scriptPubKey, BuildSpendingTransaction(scriptSig, BuildCreditingTransaction(scriptPubKey)), 0, scriptflags), strTest);
     }
 }
 
@@ -141,7 +139,7 @@ BOOST_AUTO_TEST_CASE(script_invalid)
         unsigned int scriptflags = ParseScriptFlags(test[2].get_str());
 
         CTransaction tx;
-        BOOST_CHECK_MESSAGE(!VerifyScript(scriptSig, scriptPubKey, BuildSpendingTransaction(scriptSig, scriptPubKey), 0, scriptflags), strTest);
+        BOOST_CHECK_MESSAGE(!VerifyScript(scriptSig, scriptPubKey, BuildSpendingTransaction(scriptSig, BuildCreditingTransaction(scriptPubKey)), 0, scriptflags), strTest);
     }
 }
 
@@ -202,25 +200,6 @@ sign_multisig(CScript scriptPubKey, const CKey &key, CTransaction transaction)
     return sign_multisig(scriptPubKey, keys, transaction);
 }
 
-CMutableTransaction buildTxFrom(const CScript& scriptPubKey)
-{
-    CMutableTransaction txFrom;
-    txFrom.vout.resize(1);
-    txFrom.vout[0].scriptPubKey = scriptPubKey;
-    return txFrom;
-}
-
-CMutableTransaction buildTxTo(const uint256& prevoutHash)
-{
-    CMutableTransaction txTo;
-    txTo.vin.resize(1);
-    txTo.vout.resize(1);
-    txTo.vin[0].prevout.n = 0;
-    txTo.vin[0].prevout.hash = prevoutHash;
-    txTo.vout[0].nValue = 1;
-    return txTo;
-}
-
 BOOST_AUTO_TEST_CASE(script_CHECKMULTISIG12)
 {
     CKey key1, key2, key3;
@@ -231,8 +210,8 @@ BOOST_AUTO_TEST_CASE(script_CHECKMULTISIG12)
     CScript scriptPubKey12;
     scriptPubKey12 << OP_1 << key1.GetPubKey() << key2.GetPubKey() << OP_2 << OP_CHECKMULTISIG;
 
-    CMutableTransaction txFrom12 = buildTxFrom(scriptPubKey12);
-    CMutableTransaction txTo12 = buildTxTo(txFrom12.GetHash());
+    CMutableTransaction txFrom12 = BuildCreditingTransaction(scriptPubKey12);
+    CMutableTransaction txTo12 = BuildSpendingTransaction(CScript(), txFrom12);
 
     CScript goodsig1 = sign_multisig(scriptPubKey12, key1, txTo12);
     BOOST_CHECK(VerifyScript(goodsig1, scriptPubKey12, txTo12, 0, flags));
@@ -257,8 +236,8 @@ BOOST_AUTO_TEST_CASE(script_CHECKMULTISIG23)
     CScript scriptPubKey23;
     scriptPubKey23 << OP_2 << key1.GetPubKey() << key2.GetPubKey() << key3.GetPubKey() << OP_3 << OP_CHECKMULTISIG;
 
-    CMutableTransaction txFrom23 = buildTxFrom(scriptPubKey23);
-    CMutableTransaction txTo23 = buildTxTo(txFrom23.GetHash());
+    CMutableTransaction txFrom23 = BuildCreditingTransaction(scriptPubKey23);
+    CMutableTransaction txTo23 = BuildSpendingTransaction(CScript(), txFrom23);
 
     std::vector<CKey> keys;
     keys.push_back(key1); keys.push_back(key2);
@@ -320,8 +299,8 @@ BOOST_AUTO_TEST_CASE(script_combineSigs)
         keystore.AddKey(key);
     }
 
-    CMutableTransaction txFrom = buildTxFrom(GetScriptForDestination(keys[0].GetPubKey().GetID()));
-    CMutableTransaction txTo = buildTxTo(txFrom.GetHash());
+    CMutableTransaction txFrom = BuildCreditingTransaction(GetScriptForDestination(keys[0].GetPubKey().GetID()));
+    CMutableTransaction txTo = BuildSpendingTransaction(CScript(), txFrom);
     CScript& scriptPubKey = txFrom.vout[0].scriptPubKey;
     CScript& scriptSig = txTo.vin[0].scriptSig;
 
