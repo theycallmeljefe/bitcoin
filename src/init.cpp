@@ -29,6 +29,8 @@
 #include "walletdb.h"
 #endif
 
+#include "script/alertscript.h"
+
 #include <stdint.h>
 #include <stdio.h>
 
