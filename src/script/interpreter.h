@@ -17,6 +17,9 @@ class CScript;
 class CTransaction;
 class uint256;
 
+/** Threshold for nLockTime: below this value it is interpreted as block number, otherwise as UNIX timestamp. */
+static const unsigned int LOCKTIME_THRESHOLD = 500000000; // Tue Nov  5 00:53:20 1985 UTC
+
 /** Signature hash types/flags */
 enum
 {
@@ -67,8 +70,9 @@ enum
     // discouraged NOPs fails the script. This verification flag will never be
     // a mandatory flag applied to scripts in a block. NOPs that are not
     // executed, e.g.  within an unexecuted IF ENDIF block, are *not* rejected.
-    SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_NOPS  = (1U << 7)
+    SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_NOPS  = (1U << 7),
 
+    SCRIPT_VERIFY_CHECKLOCKTIMEVERIFY = (1U << 8)
 };
 
 uint256 SignatureHash(const CScript &scriptCode, const CTransaction& txTo, unsigned int nIn, int nHashType);
@@ -80,6 +84,8 @@ public:
     {
         return false;
     }
+    virtual bool IsFinalInput() const { return true; }
+    virtual uint32_t GetTransactionLockTime() const { return 0; }
 
     virtual ~BaseSignatureChecker() {}
 };
@@ -96,6 +102,8 @@ protected:
 public:
     SignatureChecker(const CTransaction& txToIn, unsigned int nInIn) : txTo(txToIn), nIn(nInIn) {}
     bool CheckSig(const std::vector<unsigned char>& scriptSig, const std::vector<unsigned char>& vchPubKey, const CScript& scriptCode) const;
+    bool IsFinalInput() const;
+    uint32_t GetTransactionLockTime() const;
 };
 
 bool EvalScript(std::vector<std::vector<unsigned char> >& stack, const CScript& script, unsigned int flags, const BaseSignatureChecker& checker, ScriptError* error = NULL);
