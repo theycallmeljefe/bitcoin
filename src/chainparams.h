@@ -50,6 +50,7 @@ public:
     /** Used to check majorities for block version upgrade */
     int EnforceBlockUpgradeMajority() const { return nEnforceBlockUpgradeMajority; }
     int RejectBlockOutdatedMajority() const { return nRejectBlockOutdatedMajority; }
+    int ImplyBlockUpgradeMajority() const { return nImplyBlockUpgradeMajority; }
     int ToCheckBlockUpgradeMajority() const { return nToCheckBlockUpgradeMajority; }
 
     /** Used if GenerateBitcoins is called with a negative number of threads */
@@ -91,6 +92,7 @@ protected:
     int nSubsidyHalvingInterval;
     int nEnforceBlockUpgradeMajority;
     int nRejectBlockOutdatedMajority;
+    int nImplyBlockUpgradeMajority;
     int nToCheckBlockUpgradeMajority;
     int64_t nTargetTimespan;
     int64_t nTargetSpacing;
@@ -121,6 +123,7 @@ public:
     //! Published setters to allow changing values in unit test cases
     virtual void setSubsidyHalvingInterval(int anSubsidyHalvingInterval) =0;
     virtual void setEnforceBlockUpgradeMajority(int anEnforceBlockUpgradeMajority)=0;
+    virtual void setImplyBlockUpgradeMajority(int anImplyBlockUpgradeMajority)=0;
     virtual void setRejectBlockOutdatedMajority(int anRejectBlockOutdatedMajority)=0;
     virtual void setToCheckBlockUpgradeMajority(int anToCheckBlockUpgradeMajority)=0;
     virtual void setDefaultCheckMemPool(bool aDefaultCheckMemPool)=0;

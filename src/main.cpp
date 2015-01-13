@@ -54,6 +54,8 @@ bool fTxIndex = false;
 bool fIsBareMultisigStd = true;
 unsigned int nCoinCacheSize = 5000;
 
+//! Use bit 0 (0x00000001) for indicating DERSIG compliance.
+static const int32_t VERSION_BIT_DERSIG = 1;
 
 /** Fees smaller than this (in satoshi) are considered zero fee (for relaying and mining) */
 CFeeRate minRelayTxFee = CFeeRate(1000);
@@ -1761,8 +1763,10 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
     // BIP16 didn't become active until Apr 1 2012
     int64_t nBIP16SwitchTime = 1333238400;
     bool fStrictPayToScriptHash = (pindex->GetBlockTime() >= nBIP16SwitchTime);
+    bool fDERSIG = pindex->flagcounters.DERSIG == 0xFFFF || (pindex->nVersion & VERSION_BIT_DERSIG && pindex->flagcounters.DERSIG >= Params().EnforceBlockUpgradeMajority());
 
-    unsigned int flags = fStrictPayToScriptHash ? SCRIPT_VERIFY_P2SH : SCRIPT_VERIFY_NONE;
+    unsigned int flags = (fStrictPayToScriptHash ? SCRIPT_VERIFY_P2SH : SCRIPT_VERIFY_NONE) |
+        (fDERSIG ? SCRIPT_VERIFY_DERSIG : SCRIPT_VERIFY_NONE);
 
     CBlockUndo blockundo;
 
@@ -1961,17 +1965,9 @@ void static UpdateTip(CBlockIndex *pindexNew) {
     static bool fWarned = false;
     if (!IsInitialBlockDownload() && !fWarned)
     {
-        int nUpgraded = 0;
-        const CBlockIndex* pindex = chainActive.Tip();
-        for (int i = 0; i < 100 && pindex != NULL; i++)
-        {
-            if (pindex->nVersion > CBlock::CURRENT_VERSION)
-                ++nUpgraded;
-            pindex = pindex->pprev;
-        }
-        if (nUpgraded > 0)
-            LogPrintf("SetBestChain: %d of last 100 blocks above version %d\n", nUpgraded, (int)CBlock::CURRENT_VERSION);
-        if (nUpgraded > 100/2)
+        if (pindexNew->flagcounters.unexpected > 0)
+            LogPrintf("SetBestChain: %d of last 100 blocks above expected version\n", pindexNew->flagcounters.unexpected);
+        if (pindexNew->flagcounters.unexpected > 100/2)
         {
             // strMiscWarning is read by GetWarnings(), called by Qt and the JSON-RPC code to warn the user:
             strMiscWarning = _("Warning: This version is obsolete, upgrade required!");
@@ -2334,6 +2330,49 @@ bool ReconsiderBlock(CValidationState& state, CBlockIndex *pindex) {
     return true;
 }
 
+int32_t ComputeBlockVersion(const CBlockIndex* pindexprev)
+{
+    int32_t nVersion = 2; // Mandated by BIP34.
+    if (pindexprev && pindexprev->flagcounters.DERSIG != 0xFFFF) {
+        // Second DERSIG threshold has not passed, need to indicate support.
+        nVersion |= VERSION_BIT_DERSIG;
+    }
+    return nVersion;
+}
+
+void static UpdateFlagCounters(CBlockIndex* pindex)
+{
+    // Inherit counters from parent block.
+    if (pindex->pprev) {
+        pindex->flagcounters = pindex->pprev->flagcounters;
+    }
+
+    // Update DERSIG counter.
+    if (pindex->flagcounters.DERSIG != 0xFFFF) {
+        pindex->flagcounters.DERSIG += (pindex->nVersion & VERSION_BIT_DERSIG) != 0;
+        if (pindex->nHeight >= Params().ToCheckBlockUpgradeMajority()) {
+            pindex->flagcounters.DERSIG -= (pindex->GetAncestor(pindex->nHeight - Params().ToCheckBlockUpgradeMajority())->nVersion & VERSION_BIT_DERSIG) != 0;
+        }
+        if (pindex->flagcounters.DERSIG >= Params().ImplyBlockUpgradeMajority()) {
+            pindex->flagcounters.DERSIG = 0xFFFF;
+        }
+    }
+
+    // Update 'unexpected' counter.
+    // This counter tracks the number of blocks where (nVersion & ~expected_nVersion) is true.
+    // This condition covers any bits being set, or any bits representing a counter being increased.
+    if (pindex->flagcounters.unexpected != 0xFF) {
+        pindex->flagcounters.unexpected += (pindex->nVersion & ~ComputeBlockVersion(pindex->pprev)) != 0;
+        if (pindex->nHeight >= 100) {
+            CBlockIndex* pindexBack = pindex->GetAncestor(pindex->nHeight - 100);
+            pindex->flagcounters.unexpected -= (pindexBack->nVersion & ~ComputeBlockVersion(pindexBack->pprev)) != 0;
+        }
+        if (pindex->flagcounters.unexpected > 100/2) {
+            pindex->flagcounters = 0xFF;
+        }
+    }
+}
+
 CBlockIndex* AddToBlockIndex(const CBlockHeader& block)
 {
     // Check for duplicate
@@ -2359,6 +2398,7 @@ CBlockIndex* AddToBlockIndex(const CBlockHeader& block)
         pindexNew->BuildSkip();
     }
     pindexNew->nChainWork = (pindexNew->pprev ? pindexNew->pprev->nChainWork : 0) + GetBlockProof(*pindexNew);
+    UpdateFlagCounters(pindexNew);
     pindexNew->RaiseValidity(BLOCK_VALID_TREE);
     if (pindexBestHeader == NULL || pindexBestHeader->nChainWork < pindexNew->nChainWork)
         pindexBestHeader = pindexNew;
@@ -2886,6 +2926,7 @@ bool static LoadBlockIndexDB()
     {
         CBlockIndex* pindex = item.second;
         pindex->nChainWork = (pindex->pprev ? pindex->pprev->nChainWork : 0) + GetBlockProof(*pindex);
+        UpdateFlagCounters(pindex);
         if (pindex->nStatus & BLOCK_HAVE_DATA) {
             if (pindex->pprev) {
                 if (pindex->pprev->nChainTx) {

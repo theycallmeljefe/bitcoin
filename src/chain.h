@@ -88,6 +88,17 @@ enum BlockStatus {
     BLOCK_FAILED_MASK        =   BLOCK_FAILED_VALID | BLOCK_FAILED_CHILD,
 };
 
+struct BlockFlagCounters
+{
+    //! Counter for the DER signature softfork.
+    uint16_t DERSIG;
+
+    //! Counter for unexpected block versions.
+    uint16_t unexpected;
+
+    BlockFlagCounters() : DERSIG(0), unexpected(0) {}
+};
+
 /** The block chain is a tree shaped structure starting with the
  * genesis block at the root, with each block potentially having multiple
  * candidates to be the next block. A blockindex may have multiple pprev pointing
@@ -141,6 +152,8 @@ public:
 
     //! (memory only) Sequential id assigned to distinguish order in which blocks are received.
     uint32_t nSequenceId;
+
+    BlockFlagCounters flagcounters;
 
     void SetNull()
     {

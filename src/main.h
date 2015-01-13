@@ -301,6 +301,9 @@ bool IsStandardTx(const CTransaction& tx, std::string& reason);
 
 bool IsFinalTx(const CTransaction &tx, int nBlockHeight = 0, int64_t nBlockTime = 0);
 
+/** Compute the expected nVersion number for a block, based on its predecessor. */
+int32_t ComputeBlockVersion(const CBlockIndex* pindexprev);
+
 /** 
  * Closure representing one script verification
  * Note that this stores references to the spending transaction 
