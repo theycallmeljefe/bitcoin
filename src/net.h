@@ -306,6 +306,7 @@ public:
     std::set<uint256> setKnown;
     int64_t nNextAddrSend;
     int64_t nNextLocalAddrSend;
+    int64_t nNextClearSetKnown;
 
     // inventory based relay
     mruset<CInv> setInventoryKnown;
