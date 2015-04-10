@@ -4893,18 +4893,19 @@ bool SendMessages(CNode* pto)
         // Message: addr
         //
 
-        if (pto->nNextLocalAddrSend < GetTime()) {
+        int64_t nNowMicros = GetTimeMicros();
+        if (pto->nNextLocalAddrSend < nNowMicros) {
             AdvertizeLocal(pto);
-            pto->nNextLocalAddrSend = GetTime() + GetRand(24 * 60 * 60);
-        }
-        
-        if (pto->nNextClearSetKnown < GetTime()) {
-            pto->setAddrKnown.clear();
-            pto->nNextClearSetKnown = GetTime() + GetRand(12 * 60 * 60);
+            pto->nNextLocalAddrSend = nNowMicros + 1000 * (int64_t)GetRand(24 * 60 * 60 * 1000);
         }
 
-        if (pto->nNextAddrSend < GetTime()) {
-            pto->nNextAddrSend = GetTime() + GetRand(30);
+        if (pto->nNextClearSetKnown < nNowMicros) {
+            pto->setAddrKnown.clear();
+            pto->nNextClearSetKnown = nNowMicros + 1000 * (int64_t)GetRand(12 * 60 * 60 * 1000);
+        }
+
+        if (pto->nNextAddrSend < nNowMicros) {
+            pto->nNextAddrSend = nNowMicros + GetRand(30 * 1000000);
             vector<CAddress> vAddr;
             vAddr.reserve(std::min(1000, static_cast<int>(pto->vAddrToSend.size())));
             BOOST_FOREACH(const CAddress& addr, pto->vAddrToSend)
@@ -4973,11 +4974,11 @@ bool SendMessages(CNode* pto)
         // Message: inventory
         //
         vector<CInv> vInv, vInvWait;
-        int64_t nNow = GetTime();
+        nNowMicros = GetTimeMicros();
 
         vInv.reserve(1000);
         
-        if (pto->nNextInvSend < nNow)
+        if (pto->nNextInvSend < nNowMicros)
             vInvWait.reserve(pto->vInventoryToSend.size());
 
         {
@@ -5001,7 +5002,7 @@ bool SendMessages(CNode* pto)
                     }
                     case MSG_TX:
                     {
-                        if (pto->nNextInvSend < nNow || pto->fWhitelisted) {
+                        if (pto->nNextInvSend < nNowMicros || pto->fWhitelisted) {
                             if (pto->setInventoryKnown.insert(inv).second) {
                                 vInv.push_back(inv);
                                 if (vInv.size() >= 1000) {
@@ -5032,11 +5033,11 @@ bool SendMessages(CNode* pto)
         if (!vInv.empty())
             pto->PushMessage("inv", vInv);
 
-        if (pto->nNextInvSend < nNow)
-            pto->nNextInvSend = nNow + GetRand(10);
+        if (pto->nNextInvSend < nNowMicros)
+            pto->nNextInvSend = nNowMicros + GetRand(10 * 1000000);
 
         // Detect whether we're stalling
-        int64_t nNowMicros = GetTimeMicros();
+        nNowMicros = GetTimeMicros();
         if (!pto->fDisconnect && state.nStallingSince && state.nStallingSince < nNowMicros - 1000000 * BLOCK_STALLING_TIMEOUT) {
             // Stalling only triggers when the block download window cannot move. During normal steady state,
             // the download window should be much larger than the to-be-downloaded set of blocks, so disconnection
