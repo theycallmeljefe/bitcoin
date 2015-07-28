@@ -177,6 +177,11 @@ public:
      */
     bool Verify(const uint256& hash, const std::vector<unsigned char>& vchSig) const;
 
+    /**
+     * Check whether a signature is normalized (lower-S).
+     */
+    static bool CheckLowS(const std::vector<unsigned char>& vchSig);
+
     //! Recover a public key from a compact signature.
     bool RecoverCompact(const uint256& hash, const std::vector<unsigned char>& vchSig);
 
@@ -203,6 +208,14 @@ struct CExtPubKey {
     void Encode(unsigned char code[74]) const;
     void Decode(const unsigned char code[74]);
     bool Derive(CExtPubKey& out, unsigned int nChild) const;
+};
+
+/** Users of this module must hold an ECCVerifyHandle. */
+class ECCVerifyHandle
+{
+public:
+    ECCVerifyHandle();
+    ~ECCVerifyHandle();
 };
 
 #endif // BITCOIN_PUBKEY_H
