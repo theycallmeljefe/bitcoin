@@ -4036,6 +4036,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
 
         // Mark this node as currently connected, so we update its timestamp later.
         if (pfrom->fNetworkNode) {
+            pfrom->PushMessage("mempool");
             LOCK(cs_main);
             State(pfrom->GetId())->fCurrentlyConnected = true;
         }
@@ -4291,6 +4292,11 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
         CInv inv(MSG_TX, tx.GetHash());
         pfrom->AddInventoryKnown(inv);
 
+        {
+            CValidationState state;
+            FlushStateToDisk(state, FLUSH_STATE_PERIODIC);
+        }
+
         LOCK(cs_main);
 
         bool fMissingInputs = false;
@@ -4308,10 +4314,10 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
             RelayTransaction(tx);
             vWorkQueue.push_back(inv.hash);
 
-            LogPrint("mempool", "AcceptToMemoryPool: peer=%d: accepted %s (poolsz %u txn, %u kB)\n",
+            LogPrint("mempool", "AcceptToMemoryPool: peer=%d: accepted %s (poolsz %u txn, %u kB mempool, %u kB utxo)\n",
                 pfrom->id,
                 tx.GetHash().ToString(),
-                mempool.size(), mempool.DynamicMemoryUsage() / 1000);
+                mempool.size(), mempool.DynamicMemoryUsage() / 1000, pcoinsTip->DynamicMemoryUsage() / 1000);
 
             // Recursively process any orphan transactions that depended on this one
             set<NodeId> setMisbehaving;
