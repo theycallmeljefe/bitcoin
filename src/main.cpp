@@ -794,10 +794,18 @@ void LimitMempoolSize(CTxMemPool& pool, size_t limit, unsigned long age) {
     if (expired != 0)
         LogPrint("mempool", "Expired %i transactions from the memory pool\n", expired);
 
-    std::vector<uint256> vNoSpendsRemaining;
-    pool.TrimToSize(std::min(limit, mempoolUsage - 1), &vNoSpendsRemaining);
-    BOOST_FOREACH(const uint256& removed, vNoSpendsRemaining)
-        pcoinsTip->Uncache(removed);
+    size_t mempoolUsage = pool.DynamicMemoryUsage();
+    size_t coinsUsage = pcoinsTip->DynamicMemoryUsage();
+
+    while (mempoolUsage > limit || coinsUsage + mempoolUsage > nCoinCacheUsage + limit) {
+        std::vector<uint256> vNoSpendsRemaining;
+        pool.TrimToSize(std::min(limit, mempoolUsage - 1), &vNoSpendsRemaining);
+        BOOST_FOREACH(const uint256& removed, vNoSpendsRemaining)
+            pcoinsTip->Uncache(removed);
+
+        mempoolUsage = pool.DynamicMemoryUsage();
+        coinsUsage = pcoinsTip->DynamicMemoryUsage();
+    }
 }
 
 CAmount GetMinRelayFee(const CTransaction& tx, const CTxMemPool& pool, unsigned int nBytes, bool fAllowFree)
