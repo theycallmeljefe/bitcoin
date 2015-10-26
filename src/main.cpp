@@ -927,13 +927,13 @@ bool AcceptToMemoryPoolWorker(CTxMemPool& pool, CValidationState &state, const C
         // Note that this does not check for the presence of actual outputs (see the next check for that),
         // and only helps with filling in pfMissingInputs (to determine missing vs spent).
         BOOST_FOREACH(const CTxIn txin, tx.vin) {
-            bool fMaybeUncache = !view.HaveCoinsInCache(txin.prevout.hash);
+            if (!view.HaveCoinsInCache(txin.prevout.hash))
+                vHashTxnToUncache.push_back(txin.prevout.hash);
             if (!view.HaveCoins(txin.prevout.hash)) {
                 if (pfMissingInputs)
                     *pfMissingInputs = true;
                 return false; // fMissingInputs and !state.IsInvalid() is used to detect this condition, don't set state.Invalid()
-            } else if (fMaybeUncache)
-                vHashTxnToUncache.push_back(txin.prevout.hash);
+            }
         }
 
         // are the actual inputs available?
