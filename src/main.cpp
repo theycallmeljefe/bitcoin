@@ -918,8 +918,10 @@ bool AcceptToMemoryPoolWorker(CTxMemPool& pool, CValidationState &state, const C
         view.SetBackend(viewMemPool);
 
         // do we already have it?
+        bool fHadTxInCache = view.HaveCoinsInCache(hash);
         if (view.HaveCoins(hash)) {
-            vHashTxnToUncache.push_back(hash);
+            if (!fHadTxInCache)
+                vHashTxnToUncache.push_back(hash);
             return state.Invalid(false, REJECT_ALREADY_KNOWN, "txn-already-known");
         }
 
