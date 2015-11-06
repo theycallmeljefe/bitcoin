@@ -16,6 +16,7 @@
 #include "consensus/validation.h"
 #include "hash.h"
 #include "init.h"
+#include "merkle.h"
 #include "merkleblock.h"
 #include "net.h"
 #include "policy/policy.h"
@@ -3058,6 +3059,12 @@ bool ContextualCheckBlockHeader(const CBlockHeader& block, CValidationState& sta
         return state.Invalid(error("%s : rejected nVersion=3 block", __func__),
                              REJECT_OBSOLETE, "bad-version");
 
+    // Reject block.nVersion=4 blocks when 95% (75% on testnet) of the network has upgraded:
+    if (block.nVersion < 5 && IsSuperMajority(5, pindexPrev, consensusParams.nMajorityRejectBlockOutdated, consensusParams))
+        return state.Invalid(error("%s : rejected nVersion=4 block", __func__),
+                             REJECT_OBSOLETE, "bad-version");
+
+
     return true;
 }
 
@@ -3085,6 +3092,51 @@ bool ContextualCheckBlock(const CBlock& block, CValidationState& state, CBlockIn
         if (block.vtx[0].vin[0].scriptSig.size() < expect.size() ||
             !std::equal(expect.begin(), expect.end(), block.vtx[0].vin[0].scriptSig.begin())) {
             return state.DoS(100, error("%s: block height mismatch in coinbase", __func__), REJECT_INVALID, "bad-cb-height");
+        }
+    }
+
+    // Validation for witness commitments.
+    // * We compute the witness hash (which is the hash including witnesses) of all the block's transactions, except the
+    //   coinbase (where 0x0000....0000 is used instead).
+    // * We build a merkle tree with all those witness hashes as leaves (similar to the hashMerkleRoot in the block header).
+    // * The coinbase's input's witness must consist of a single byte array of 4 + 32 * N bytes. The first 4 bytes describe
+    //   the position in a new Merkle tree. The next N * 32 bytes describe a Merkle path of length N to end up with a
+    //   root commitment hash.
+    // * The coinbase's scriptSig must end with those 32 bytes.
+    if (block.nVersion >= 5 && IsSuperMajority(5, pindexPrev, consensusParams.nMajorityEnforceBlockUpgrade, consensusParams)) {
+        if (block.vtx[0].vin[0].scriptSig.size() < 32) {
+            return state.DoS(100, error("%s : no coinbase commitment", __func__), REJECT_INVALID, "no-coinbase-commit", true);
+        }
+        if (block.vtx[0].vwit.size() == 0) {
+            return state.DoS(100, error("%s : no witness merkle path", __func__), REJECT_INVALID, "no-witness-merkle-path", true);
+        }
+        std::vector<uint256> leaves;
+        leaves.resize(block.vtx.size()); // The witness hash of the coinbase is taken to be 0
+        for (size_t i = 1; i < block.vtx.size(); i++) {
+            leaves[i] = block.vtx[i].GetWitnessHash();
+        }
+        bool malleated = false;
+        uint256 hashWitness = ComputeMerkleRoot(leaves, &malleated);
+        if (malleated) {
+            return state.DoS(100, error("%s : witness merkle root duplication", REJECT_INVALID, "bad-witness-duplicate", true));
+        }
+        if ((block.vtx[0].vwit[0].scriptWitness.stack.size() != 1 || block.vtx[0].vwit[0].scriptWitness.stack[0].size() % 32) != 4 && block.vtx[0].vwit[0].scriptWitness.stack[0].size() > 32 * 32 + 4) {
+             return state.DoS(100, error("%s : invalid witness merkle path length", __func__), REJECT_INVALID, "bad-witness-merkle-len", true);
+        }
+        uint32_t position = le32toh(*((uint32_t*)&block.vtx[0].vwit[0].scriptWitness.stack[0][0]));
+        std::vector<uint256> branch;
+        branch.resize((block.vtx[0].vwit[0].scriptWitness.stack[0].size() - 4) / 32);
+        memcpy(branch[0].begin(), &block.vtx[0].vwit[0].scriptWitness.stack[0][4], block.vtx[0].vwit[0].scriptWitness.stack[0].size() - 4);
+        hashWitness = ComputeMerkleRootFromBranch(hashWitness, branch, position);
+        if (memcmp(hashWitness.begin(), &block.vtx[0].vin[0].scriptSig[block.vtx[0].vin[0].scriptSig.size() - 32], 32)) {
+            return state.DoS(100, error("%s : witness merkle commitment mismatch", __func__), REJECT_INVALID, "bad-witness-merkle-match", true);
+        }
+    } else {
+        // No witness data is allowed in blocks that don't commit to witness data, as this would otherwise leave room from spam.
+        for (size_t i = 0; i < block.vtx.size(); i++) {
+            if (block.vtx[i].vwit.size() > 0) {
+                return state.DoS(100, error("%s : unexpected witness data found", __func__), REJECT_INVALID, "unexpected-witness", true);
+            }
         }
     }
 
