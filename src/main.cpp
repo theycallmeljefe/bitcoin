@@ -641,7 +641,7 @@ unsigned int LimitOrphanTxSize(unsigned int nMaxOrphans) EXCLUSIVE_LOCKS_REQUIRE
 int64_t LockTime(const CTransaction &tx, int flags, const std::vector<CCoins>& prevCoins, const CBlockIndex& block)
 {
     int64_t nBlockTime = (flags & LOCKTIME_MEDIAN_TIME_PAST)
-                                    ? block.pprev->GetMedianTimePast()
+                                    ? block.GetAncestor(std::max(block.nHeight-1, 0))->GetMedianTimePast()
                                     : block.GetBlockTime();
 
     CCoins coins;
@@ -689,16 +689,15 @@ int64_t LockTime(const CTransaction &tx, int flags, const std::vector<CCoins>& p
         if(coins.nHeight != MEMPOOL_HEIGHT && coins.nHeight > block.nHeight)
             continue;
 
+        // coins.nHeight is MEMPOOL_HEIGHT
+        // if the parent transaction was from the mempool. We can't
+        // know what height it will have once confirmed, but we
+        // assume it makes it in the same block.
+        int nCoinHeight = coins.nHeight == MEMPOOL_HEIGHT ? block.nHeight : coins.nHeight;
+
         if (txin.nSequence & CTxIn::SEQUENCE_LOCKTIME_SECONDS_FLAG) {
 
-            // The only time the negative branch of this conditional
-            // is executed is when the prior output was taken from the
-            // mempool, in which case we assume it makes it into the
-            // same block (see above).
-            int64_t nCoinTime = (coins.nHeight == MEMPOOL_HEIGHT)
-                              ? nBlockTime
-                              : block.GetAncestor(std::max(coins.nHeight-1, 0))->GetMedianTimePast();
-
+            int64_t nCoinTime = block.GetAncestor(std::max(nCoinHeight-1, 0))->GetMedianTimePast();
 
             // Time-based relative lock-times are measured from the
             // smallest allowed timestamp of the block containing the
@@ -706,11 +705,6 @@ int64_t LockTime(const CTransaction &tx, int flags, const std::vector<CCoins>& p
             // block prior.
             nMinTime = std::max(nMinTime, nCoinTime + (int64_t)((txin.nSequence & CTxIn::SEQUENCE_LOCKTIME_MASK) << CTxIn::SEQUENCE_LOCKTIME_GRANULARITY) - 1);
         } else {
-            // coins.nHeight is MEMPOOL_HEIGHT
-            // if the parent transaction was from the mempool. We can't
-            // know what height it will have once confirmed, but we
-            // assume it makes it in the same block.
-            int nCoinHeight = coins.nHeight == MEMPOOL_HEIGHT ? block.nHeight : coins.nHeight;
             // We subtract 1 from relative lock-times because a lock-
             // time of 0 has the semantics of "same block," so a lock-
             // time of 1 should mean "next block," but nLockTime has
@@ -776,7 +770,7 @@ int64_t CheckLockTime(const CTransaction &tx, int flags)
 
     CBlockIndex* tip = chainActive.Tip();
     CBlockIndex index;
-    index.pprev = tip; 
+    index.pprev = tip;
     // CheckLockTime() uses chainActive.Height()+1 to evaluate
     // nLockTime because when LockTime() is called within
     // CBlock::AcceptBlock(), the height of the block *being*
