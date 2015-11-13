@@ -640,11 +640,10 @@ unsigned int LimitOrphanTxSize(unsigned int nMaxOrphans) EXCLUSIVE_LOCKS_REQUIRE
 
 int64_t LockTime(const CTransaction &tx, int flags, const std::vector<CCoins>& prevCoins, const CBlockIndex& block)
 {
+    assert(prevCoins.size() == tx.vin.size());
     int64_t nBlockTime = (flags & LOCKTIME_MEDIAN_TIME_PAST)
                                     ? block.GetAncestor(std::max(block.nHeight-1, 0))->GetMedianTimePast()
                                     : block.GetBlockTime();
-
-    CCoins coins;
 
     bool fEnforceBIP68 = static_cast<uint32_t>(tx.nVersion) >= 2
                       && flags & LOCKTIME_VERIFY_SEQUENCE;
@@ -657,9 +656,8 @@ int64_t LockTime(const CTransaction &tx, int flags, const std::vector<CCoins>& p
     // Will remain equal to true if all inputs are finalized
     // (CTxIn::SEQUENCE_FINAL).
     bool fFinalized = true;
-    int txinIndex = -1;
-    BOOST_FOREACH(const CTxIn& txin, tx.vin) {
-        txinIndex++;
+    for (size_t txinIndex = 0; txinIndex < tx.vin.size(); txinIndex++) {
+        const CTxIn& txin = tx.vin[txinIndex];
         // Set a flag if we witness an input that isn't finalized.
         if (txin.nSequence == CTxIn::SEQUENCE_FINAL)
             continue;
@@ -678,7 +676,7 @@ int64_t LockTime(const CTransaction &tx, int flags, const std::vector<CCoins>& p
         if (txin.nSequence & CTxIn::SEQUENCE_LOCKTIME_DISABLED_FLAG)
             continue;
 
-        coins = prevCoins.at(txinIndex);
+        const CCoins& coins = prevCoins[txinIndex];
 
         // If the coin height is unknown, ignore it in the calculation
         // of the LockTime
@@ -736,9 +734,8 @@ int64_t LockTime(const CTransaction &tx, int flags, const CCoinsView* pCoinsView
 {
     CCoins coins;
     std::vector<CCoins> prevCoins (tx.vin.size());
-    int txinIndex = -1;
-    BOOST_FOREACH(const CTxIn& txin, tx.vin) {
-        txinIndex++;
+    for (size_t txinIndex = 0; txinIndex < tx.vin.size(); txinIndex++) {
+        const CTxIn& txin = tx.vin[txinIndex];
         if (!pCoinsView || !pCoinsView->GetCoins(txin.prevout.hash, coins))
         {
             coins = CCoins();

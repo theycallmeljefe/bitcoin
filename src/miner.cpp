@@ -152,7 +152,6 @@ CBlockTemplate* CreateNewBlock(const CChainParams& chainparams, const CScript& s
         index.nTime = pblock->nTime;
         index.pprev = pindexPrev;
 
-        const int64_t nMedianTimePast = pindexPrev->GetMedianTimePast();
         CCoinsViewCache view(pcoinsTip);
 
         // Priority order to process transactions
