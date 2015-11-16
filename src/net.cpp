@@ -72,14 +72,14 @@ namespace {
 const static std::string NET_MESSAGE_COMMAND_OTHER = "*other*";
 
 /** Services this node implementation cares about */
-static const ServiceFlags nRelevantServices = NODE_NETWORK;
+static const ServiceFlags nRelevantServices = ServiceFlags(NODE_NETWORK | NODE_WITNESS);
 
 //
 // Global state variables
 //
 bool fDiscover = true;
 bool fListen = true;
-ServiceFlags nLocalServices = NODE_NETWORK;
+ServiceFlags nLocalServices = ServiceFlags(NODE_NETWORK | NODE_WITNESS);
 bool fRelayTxes = true;
 CCriticalSection cs_mapLocalHost;
 std::map<CNetAddr, LocalServiceInfo> mapLocalHost;
@@ -1601,6 +1601,10 @@ void ThreadOpenConnections()
 
             // only consider very recently tried nodes after 30 failed attempts
             if (nANow - addr.nLastTry < 600 && nTries < 30)
+                continue;
+
+            // only consider non-witness nodes after 40 failed attemps
+            if (!(addr.nServices & NODE_WITNESS) && nTries < 40)
                 continue;
 
             // do not allow non-default ports, unless after 50 invalid addresses selected already
