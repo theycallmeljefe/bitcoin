@@ -115,6 +115,7 @@ BITCOIN_CORE_H = \
   limitedmap.h \
   main.h \
   memusage.h \
+  merkle.h \
   merkleblock.h \
   miner.h \
   mruset.h \
@@ -276,6 +277,7 @@ libbitcoin_common_a_SOURCES = \
   hash.cpp \
   key.cpp \
   keystore.cpp \
+  merkle.cpp \
   netbase.cpp \
   primitives/block.cpp \
   primitives/transaction.cpp \
