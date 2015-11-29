@@ -1820,6 +1820,59 @@ static bool ApplyTxInUndo(const CTxInUndo& undo, CCoinsViewCache& view, const CO
     return fClean;
 }
 
+void ConvertToWitness(CTransaction& tx, std::map<COutPoint, uint32_t>& sizes, bool coinbase)
+{
+    static const std::vector<unsigned char> fakev1(33, 'B');
+
+    tx.vwit.resize(tx.vin.size());
+    for (size_t t = 0; t < tx.vout.size(); t++) {
+        if (!tx.vout[t].scriptPubKey.IsUnspendable()) {
+            CScript old;
+            CScript& scriptPubKey = *(CScript*)(&tx.vout[t].scriptPubKey);
+            old.swap(scriptPubKey);
+            if (scriptPubKey.IsPayToScriptHash()) {
+                // P2SH, convert to (fake) witness program v1; the scriptSig already contains the redeemscript
+                scriptPubKey << fakev1;
+            } else if (scriptPubKey.size() < 40) {
+                // Non-P2SH, convert to witness v0;
+                scriptPubKey << std::vector<unsigned char>(old.size() + 1, 'C');
+            } else {
+                // Non-P2SH, convert to witness v1, and account for extra witness stack element for redeemscript in spend;
+                scriptPubKey << fakev1;
+                sizes[COutPoint(tx.GetHash(), t)] = old.size();
+            }
+        }
+    }
+    if (!coinbase) {
+        for (size_t t = 0; t < tx.vin.size(); t++) {
+            CScript& scriptSig = *(CScript*)(&tx.vin[t].scriptSig);
+            CScriptWitness& scriptWitness = *(CScriptWitness*)(&tx.vwit[t].scriptWitness);
+            if (scriptWitness.IsNull() && scriptSig.IsPushOnly()) {
+                std::vector<std::vector<unsigned char> > stack;
+                if (EvalScript(stack, scriptSig, SCRIPT_VERIFY_STRICTENC, BaseSignatureChecker())) {
+                    swap(scriptWitness.stack, stack);
+                    scriptSig.clear();
+                }
+            }
+            std::map<COutPoint, uint32_t>::iterator it = sizes.find(tx.vin[t].prevout);
+            if (it != sizes.end()) {
+                scriptWitness.stack.push_back(std::vector<unsigned char>(it->second, 'D'));
+                sizes.erase(it);
+            }
+        }
+    }
+}
+
+void ConvertToWitness(CBlock& block, std::map<COutPoint, uint32_t>& sizes)
+{
+    static const std::vector<unsigned char> commitment(4 + 32 + 4 + 4, 'A');
+
+    for (size_t t = 0; t < block.vtx.size(); t++) {
+        ConvertToWitness(block.vtx[t], sizes, t == 0);
+    }
+    *(CScript*)(&block.vtx[0].vin[0].scriptSig) << commitment;
+}
+
 bool DisconnectBlock(const CBlock& block, CValidationState& state, const CBlockIndex* pindex, CCoinsViewCache& view, bool* pfClean)
 {
     assert(pindex->GetBlockHash() == view.GetBestBlock());
@@ -1990,6 +2043,8 @@ static int64_t nTimeIndex = 0;
 static int64_t nTimeCallbacks = 0;
 static int64_t nTimeTotal = 0;
 
+static std::map<COutPoint, uint32_t> witsizes;
+
 bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pindex, CCoinsViewCache& view, bool fJustCheck)
 {
     const CChainParams& chainparams = Params();
@@ -2013,7 +2068,7 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
         return true;
     }
 
-    bool fScriptChecks = true;
+    bool fScriptChecks = false /* true */;
     if (fCheckpointsEnabled) {
         CBlockIndex *pindexLastCheckpoint = Checkpoints::GetLastCheckpoint(chainparams.Checkpoints());
         if (pindexLastCheckpoint && pindexLastCheckpoint->GetAncestor(pindex->nHeight) == pindex) {
@@ -2161,6 +2216,20 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
 
     if (fJustCheck)
         return true;
+
+    {
+        CBlock copy(block);
+        ConvertToWitness(copy, witsizes);
+        CSizeComputer ss_real(SER_NETWORK, PROTOCOL_VERSION);
+        ss_real << block;
+        CSizeComputer ss_full(SER_NETWORK, PROTOCOL_VERSION);
+        CSizeComputer ss_stripped(SER_NETWORK, PROTOCOL_VERSION | SERIALIZE_TRANSACTION_NO_WITNESS);
+        ss_full << copy;
+        ss_stripped << copy;
+        FILE* f = fopen("block_sizes.txt", "a");
+        fprintf(f, "%s %i %lu %lu %lu\n", block.GetHash().ToString().c_str(), (int)(pindex->nHeight), (unsigned long)ss_real.size(), (unsigned long)ss_stripped.size(), (unsigned long)(ss_full.size() - ss_stripped.size()));
+        fclose(f);
+    }
 
     // Write undo information to disk
     if (pindex->GetUndoPos().IsNull() || !pindex->IsValid(BLOCK_VALID_SCRIPTS))
