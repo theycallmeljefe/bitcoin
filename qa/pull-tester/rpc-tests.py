@@ -135,6 +135,7 @@ testScripts = [
     'invalidtxrequest.py',
     'abandonconflict.py',
     'p2p-versionbits-warning.py',
+    'segwit.py',
     'importprunedfunds.py',
     'signmessages.py',
 ]
