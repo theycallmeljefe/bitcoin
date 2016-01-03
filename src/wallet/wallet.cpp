@@ -2274,7 +2274,7 @@ bool CWallet::CreateTransaction(const vector<CRecipient>& vecSend, CWalletTx& wt
                     nIn++;
                 }
 
-                unsigned int nBytes = ::GetSerializeSize(txNew, SER_NETWORK, PROTOCOL_VERSION);
+                unsigned int nBytes = GetVirtualTransactionSize(txNew);
 
                 // Remove scriptSigs if we used dummy signatures for fee calculation
                 if (!sign) {
@@ -2286,7 +2286,7 @@ bool CWallet::CreateTransaction(const vector<CRecipient>& vecSend, CWalletTx& wt
                 *static_cast<CTransaction*>(&wtxNew) = CTransaction(txNew);
 
                 // Limit size
-                if (nBytes >= MAX_STANDARD_TX_SIZE)
+                if (GetTransactionCost(txNew) >= MAX_STANDARD_TX_COST)
                 {
                     strFailReason = _("Transaction too large");
                     return false;

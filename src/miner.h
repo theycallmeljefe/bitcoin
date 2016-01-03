@@ -26,7 +26,7 @@ struct CBlockTemplate
 {
     CBlock block;
     std::vector<CAmount> vTxFees;
-    std::vector<int64_t> vTxSigOps;
+    std::vector<int64_t> vTxSigOpsCost;
     std::vector<unsigned char> vchCoinbaseCommitment;
 };
 
@@ -41,12 +41,14 @@ private:
 
     // Configuration parameters for the block size
     bool fIncludeWitness;
-    unsigned int nBlockMaxSize, nBlockMinSize;
+    unsigned int nBlockMaxCost, nBlockMaxSize, nBlockMinSize;
+    bool fNeedSizeAccounting;
 
     // Information on the current status of the block
+    uint64_t nBlockCost;
     uint64_t nBlockSize;
     uint64_t nBlockTx;
-    unsigned int nBlockSigOps;
+    uint64_t nBlockSigOpsCost;
     CAmount nFees;
     CTxMemPool::setEntries inBlock;
 
