@@ -283,13 +283,28 @@ public:
     unsigned int nTime;
 };
 
+/** getdata message types */
+const uint32_t MSG_WITNESS_FLAG = 1 << 30;
+const uint32_t MSG_TYPE_MASK    = 0xffffffff >> 2;
+enum GetDataMsg
+{
+    UNDEFINED = 0,
+    MSG_TX,
+    MSG_BLOCK,
+    MSG_TYPE_MAX = MSG_BLOCK,
+    // The following can only occur in getdata. Invs always use TX or BLOCK.
+    MSG_FILTERED_BLOCK,
+    MSG_WITNESS_BLOCK = MSG_BLOCK | MSG_WITNESS_FLAG,
+    MSG_WITNESS_TX = MSG_TX | MSG_WITNESS_FLAG,
+    MSG_FILTERED_WITNESS_BLOCK = MSG_FILTERED_BLOCK | MSG_WITNESS_FLAG,
+};
+
 /** inv message data */
 class CInv
 {
 public:
     CInv();
     CInv(int typeIn, const uint256& hashIn);
-    CInv(const std::string& strType, const uint256& hashIn);
 
     ADD_SERIALIZE_METHODS;
 
@@ -302,8 +317,7 @@ public:
 
     friend bool operator<(const CInv& a, const CInv& b);
 
-    bool IsKnownType() const;
-    const char* GetCommand() const;
+    std::string GetCommand() const;
     std::string ToString() const;
 
     // TODO: make private (improves encapsulation)
@@ -311,18 +325,5 @@ public:
     int type;
     uint256 hash;
 };
-
-const uint32_t MSG_WITNESS_FLAG = 1 << 30;
-const uint32_t MSG_TYPE_MASK    = 0xffffffff >> 2;
-enum {
-    MSG_TX = 1,
-    MSG_BLOCK,
-    // The following can only occur in getdata. Invs always use TX or BLOCK.
-    MSG_FILTERED_BLOCK,
-    MSG_WITNESS_BLOCK = MSG_BLOCK | MSG_WITNESS_FLAG,
-    MSG_WITNESS_TX = MSG_TX | MSG_WITNESS_FLAG,
-};
-
-const int MSG_TYPE_MAX = MSG_FILTERED_BLOCK;
 
 #endif // BITCOIN_PROTOCOL_H
