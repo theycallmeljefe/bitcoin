@@ -4584,6 +4584,10 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
             pfrom->PushMessage(NetMsgType::SENDHEADERS);
         }
 
+        // Temporary hack to make old segnet nodes not fail (needed because we switched to a service bit instead)
+        if (pfrom->nVersion >= WITNESS_VERSION) {
+            pfrom->PushMessage("havewitness");
+        }
     }
 
 
@@ -4657,6 +4661,13 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
     {
         LOCK(cs_main);
         State(pfrom->GetId())->fPreferHeaders = true;
+    }
+
+    // Temporary hack to make old segnet nodes not fail (needed because we switched to a service bit instead)
+    else if (strCommand == "havewitness")
+    {
+        LOCK(cs_main);
+        State(pfrom->GetId())->fHaveWitness = true;
     }
 
     else if (strCommand == NetMsgType::INV)
