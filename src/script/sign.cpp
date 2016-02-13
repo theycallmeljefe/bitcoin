@@ -97,6 +97,33 @@ static bool SignStep(const BaseSignatureCreator& creator, const CScript& scriptP
     case TX_MULTISIG:
         scriptSigRet << OP_0; // workaround CHECKMULTISIG bug
         return (SignN(vSolutions, creator, scriptPubKey, scriptSigRet));
+
+    case TX_ATOMICSWAP:
+        uint256 image(vSolutions[0]);
+        uint256 preimage;
+        if (creator.KeyStore().GetPreimage(image, preimage)) {
+            keyID = CPubKey(vSolutions[1]).GetID();
+            if (!Sign1(keyID, creator, scriptPubKey, scriptSigRet)) {
+                return false;
+            }
+            else
+            {
+                scriptSigRet << vector<unsigned char>(preimage.begin(), preimage.end());
+                scriptSigRet << OP_TRUE; // to select the first branch (preimage branch)
+            }
+            return true;
+        } else {
+            keyID = CPubKey(vSolutions[3]).GetID();
+            if (!Sign1(keyID, creator, scriptPubKey, scriptSigRet)) {
+                return false;
+            }
+            else
+            {
+                scriptSigRet << OP_FALSE; // to select the second branch (CLTV branch)
+            }
+            return true;
+        }
+        return false;
     }
     return false;
 }
@@ -150,8 +177,15 @@ bool SignSignature(const CKeyStore &keystore, const CTransaction& txFrom, CMutab
 static CScript PushAll(const vector<valtype>& values)
 {
     CScript result;
-    BOOST_FOREACH(const valtype& v, values)
-        result << v;
+    BOOST_FOREACH(const valtype& v, values) {
+        if (v.size() == 0) {
+            result << OP_0;
+        } else if (v.size() == 1 && v[0] >= 1 && v[0] <= 16) {
+            result << CScript::EncodeOP_N(v[0]);
+        } else {
+            result << v;
+        }
+    }
     return result;
 }
 
@@ -218,6 +252,7 @@ static CScript CombineSignatures(const CScript& scriptPubKey, const BaseSignatur
     {
     case TX_NONSTANDARD:
     case TX_NULL_DATA:
+    case TX_ATOMICSWAP:
         // Don't know anything about this, assume bigger one is correct:
         if (sigs1.size() >= sigs2.size())
             return PushAll(sigs1);

@@ -201,6 +201,7 @@ extern UniValue estimatesmartpriority(const UniValue& params, bool fHelp);
 
 extern UniValue verifymessage(const UniValue& params, bool fHelp);
 extern UniValue createmultisig(const UniValue& params, bool fHelp);
+extern UniValue createatomicswap(const UniValue& params, bool fHelp);
 extern UniValue validateaddress(const UniValue& params, bool fHelp);
 extern UniValue getinfo(const UniValue& params, bool fHelp);
 extern UniValue getblockchaininfo(const UniValue& params, bool fHelp);

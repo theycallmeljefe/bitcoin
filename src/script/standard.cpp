@@ -31,6 +31,7 @@ const char* GetTxnOutputType(txnouttype t)
     case TX_SCRIPTHASH: return "scripthash";
     case TX_MULTISIG: return "multisig";
     case TX_NULL_DATA: return "nulldata";
+    case TX_ATOMICSWAP: return "atomicswap";
     }
     return NULL;
 }
@@ -52,6 +53,24 @@ bool Solver(const CScript& scriptPubKey, txnouttype& typeRet, vector<vector<unsi
 
         // Sender provides N pubkeys, receivers provides M signatures
         mTemplates.insert(make_pair(TX_MULTISIG, CScript() << OP_SMALLINTEGER << OP_PUBKEYS << OP_SMALLINTEGER << OP_CHECKMULTISIG));
+
+        // Sender requests the preimage of a SHA256 hash
+        mTemplates.insert(make_pair(TX_ATOMICSWAP, CScript()
+            <<  OP_IF
+            <<      OP_SHA256
+            <<      OP_ANYDATA // Preimage
+            <<      OP_EQUALVERIFY
+            <<      OP_PUBKEY
+            <<      OP_CHECKSIGVERIFY
+            <<  OP_ELSE
+            <<      OP_ANYDATA // Locktime
+            <<      OP_CHECKLOCKTIMEVERIFY
+            <<      OP_DROP
+            <<      OP_PUBKEY
+            <<      OP_CHECKSIGVERIFY
+            <<  OP_ENDIF
+            <<  OP_TRUE
+        ));
     }
 
     vSolutionsRet.clear();
@@ -125,7 +144,13 @@ bool Solver(const CScript& scriptPubKey, txnouttype& typeRet, vector<vector<unsi
                 // to other if/else statements
             }
 
-            if (opcode2 == OP_PUBKEY)
+            if (opcode2 == OP_ANYDATA)
+            {
+                if (vch1.empty() && opcode1 != OP_0)
+                    break;
+                vSolutionsRet.push_back(vch1);
+            }
+            else if (opcode2 == OP_PUBKEY)
             {
                 if (vch1.size() < 33 || vch1.size() > 65)
                     break;

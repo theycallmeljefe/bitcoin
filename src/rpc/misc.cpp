@@ -396,3 +396,39 @@ UniValue setmocktime(const UniValue& params, bool fHelp)
 
     return NullUniValue;
 }
+
+UniValue createatomicswap(const UniValue& params, bool fHelp)
+{
+    std::vector<unsigned char> seller_key = ParseHexV(params[0], "seller_key");
+    std::vector<unsigned char> refund_key = ParseHexV(params[1], "refund_key");
+    std::vector<unsigned char> h_key = ParseHexV(params[2], "h_key");
+
+    if (h_key.size() != 32) {
+        throw JSONRPCError(RPC_DESERIALIZATION_ERROR, "H(K) should be 32 bytes");
+    }
+
+    CScript redeem_script;
+    redeem_script << OP_IF
+                  <<    OP_SHA256
+                  <<    h_key
+                  <<    OP_EQUALVERIFY
+                  <<    seller_key
+                  <<    OP_CHECKSIGVERIFY
+                  << OP_ELSE
+                  <<    CScriptNum(params[3].get_int64())
+                  <<    OP_CHECKLOCKTIMEVERIFY
+                  <<    OP_DROP
+                  <<    refund_key
+                  <<    OP_CHECKSIGVERIFY
+                  << OP_ENDIF
+                  << OP_TRUE;
+
+    UniValue result(UniValue::VOBJ);
+    result.push_back(Pair("redeem_script", HexStr(redeem_script.begin(), redeem_script.end())));
+    result.push_back(Pair("p2sh", CBitcoinAddress(CScriptID(redeem_script)).ToString()));
+
+    CScript scriptPubKey = GetScriptForDestination(CBitcoinAddress(CScriptID(redeem_script)).Get());
+
+    result.push_back(Pair("scriptPubKey", HexStr(scriptPubKey.begin(), scriptPubKey.end())));
+    return result;
+}

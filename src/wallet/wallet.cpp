@@ -1495,6 +1495,47 @@ bool CWalletTx::IsEquivalentTo(const CWalletTx& tx) const
         return CTransaction(tx1) == CTransaction(tx2);
 }
 
+std::vector<uint256> CWalletTx::GetPreimages() const
+{
+    std::vector<uint256> ret;
+
+    // hackish way of printing out the preimage for now
+    BOOST_FOREACH(const CTxIn &in, vin) {
+        // Find out if we know the output
+        std::map<uint256, CWalletTx>::const_iterator it = pwallet->mapWallet.find(in.prevout.hash);
+        if (it == pwallet->mapWallet.end()) {
+            continue;
+        }
+        const CTxOut& out = it->second.vout[in.prevout.n];
+        txnouttype typ;
+        // Check whether it's an atomic swap
+        std::vector<std::vector<unsigned char> > vSolutions;
+        if (!::Solver(out.scriptPubKey, typ, vSolutions)) {
+            continue;
+        }
+        vector<vector<unsigned char> > stack;
+        BaseSignatureChecker checker;
+        EvalScript(stack, in.scriptSig, 0, checker, NULL);
+
+        if (typ == TX_SCRIPTHASH && stack.size() > 0) {
+            CScript scriptRedeem(stack.back().begin(), stack.back().end());
+            stack.pop_back();
+            if (!::Solver(scriptRedeem, typ, vSolutions)) {
+                continue;
+            }
+        }
+
+        // Check whether it is using the hash locked branch
+        if (typ != TX_ATOMICSWAP || stack.size() != 3 || stack.back().size() != 1 || stack.back()[0] != 1 || (stack.end() - 2)->size() != 32) {
+            continue;
+        }
+        // Report
+        ret.push_back(uint256(*(stack.end() - 2)));
+    }
+
+    return ret;
+}
+
 std::vector<uint256> CWallet::ResendWalletTransactionsBefore(int64_t nTime)
 {
     std::vector<uint256> result;

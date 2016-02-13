@@ -48,6 +48,7 @@ isminetype IsMine(const CKeyStore &keystore, const CScript& scriptPubKey)
     CKeyID keyID;
     switch (whichType)
     {
+    case TX_ATOMICSWAP:
     case TX_NONSTANDARD:
     case TX_NULL_DATA:
         break;

@@ -398,6 +398,8 @@ public:
     bool RelayWalletTransaction();
 
     std::set<uint256> GetConflicts() const;
+
+    std::vector<uint256> GetPreimages() const;
 };
 
 

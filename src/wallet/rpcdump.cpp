@@ -11,6 +11,7 @@
 #include "script/standard.h"
 #include "sync.h"
 #include "util.h"
+#include "hash.h"
 #include "utiltime.h"
 #include "wallet.h"
 
@@ -175,6 +176,24 @@ void ImportAddress(const CBitcoinAddress& address, const string& strLabel)
     // add to address book or update label
     if (address.IsValid())
         pwalletMain->SetAddressBook(address.Get(), strLabel, "receive");
+}
+
+UniValue importpreimage(const UniValue& params, bool fHelp)
+{
+    if (!EnsureWalletIsAvailable(fHelp))
+        return NullUniValue;
+
+    LOCK2(cs_main, pwalletMain->cs_wallet);
+
+    vector<unsigned char> preimage = ParseHexV(params[0], "preimage");
+    std::vector<unsigned char> vch(32);
+    CSHA256 hash;
+    hash.Write(begin_ptr(preimage), 32);
+    hash.Finalize(begin_ptr(vch));
+
+    pwalletMain->AddPreimage(uint256(vch), uint256(preimage));
+
+    return NullUniValue;
 }
 
 UniValue importaddress(const UniValue& params, bool fHelp)

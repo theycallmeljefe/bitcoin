@@ -1344,6 +1344,16 @@ void ListTransactions(const CWalletTx& wtx, const string& strAccount, int nMinDe
                 entry.push_back(Pair("label", pwalletMain->mapAddressBook[s.destination].name));
             entry.push_back(Pair("vout", s.vout));
             entry.push_back(Pair("fee", ValueFromAmount(-nFee)));
+
+            std::vector<uint256> preimages = wtx.GetPreimages();
+            UniValue preim(UniValue::VARR);
+            BOOST_FOREACH(const uint256& pre, preimages) {
+                preim.push_back(HexStr(pre.begin(), pre.end()));
+            }
+            if (preim.size() > 0) {
+                entry.push_back(Pair("preimage", preim));
+            }
+
             if (fLong)
                 WalletTxToJSON(wtx, entry);
             ret.push_back(entry);
@@ -2501,6 +2511,7 @@ extern UniValue dumpprivkey(const UniValue& params, bool fHelp); // in rpcdump.c
 extern UniValue importprivkey(const UniValue& params, bool fHelp);
 extern UniValue importaddress(const UniValue& params, bool fHelp);
 extern UniValue importpubkey(const UniValue& params, bool fHelp);
+extern UniValue importpreimage(const UniValue& params, bool fHelp);
 extern UniValue dumpwallet(const UniValue& params, bool fHelp);
 extern UniValue importwallet(const UniValue& params, bool fHelp);
 
@@ -2529,6 +2540,7 @@ const CRPCCommand vWalletRPCCommands[] =
     { "wallet",             "importprivkey",            &importprivkey,            true  },
     { "wallet",             "importwallet",             &importwallet,             true  },
     { "wallet",             "importaddress",            &importaddress,            true  },
+    { "wallet",             "importpreimage",           &importpreimage,           true  },
     { "wallet",             "importpubkey",             &importpubkey,             true  },
     { "wallet",             "keypoolrefill",            &keypoolrefill,            true  },
     { "wallet",             "listaccounts",             &listaccounts,             false },

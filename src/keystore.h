@@ -24,6 +24,10 @@ protected:
 public:
     virtual ~CKeyStore() {}
 
+    //! Preimages
+    virtual bool GetPreimage(const uint256& image, uint256& preimage) const =0;
+    virtual bool AddPreimage(const uint256& image, const uint256& preimage) =0;
+
     //! Add a key to the store.
     virtual bool AddKeyPubKey(const CKey &key, const CPubKey &pubkey) =0;
     virtual bool AddKey(const CKey &key);
@@ -50,6 +54,7 @@ typedef std::map<CKeyID, CKey> KeyMap;
 typedef std::map<CKeyID, CPubKey> WatchKeyMap;
 typedef std::map<CScriptID, CScript > ScriptMap;
 typedef std::set<CScript> WatchOnlySet;
+typedef std::map<uint256, uint256> PreimageMap;
 
 /** Basic key store, that keeps keys in an address->secret map */
 class CBasicKeyStore : public CKeyStore
@@ -59,8 +64,11 @@ protected:
     WatchKeyMap mapWatchKeys;
     ScriptMap mapScripts;
     WatchOnlySet setWatchOnly;
+    PreimageMap mapPreimages;
 
 public:
+    bool GetPreimage(const uint256& image, uint256& preimage) const;
+    bool AddPreimage(const uint256& image, const uint256& preimage);
     bool AddKeyPubKey(const CKey& key, const CPubKey &pubkey);
     bool GetPubKey(const CKeyID &address, CPubKey& vchPubKeyOut) const;
     bool HaveKey(const CKeyID &address) const
