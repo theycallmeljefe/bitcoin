@@ -177,7 +177,6 @@ libbitcoin_server_a_SOURCES = \
   addrman.cpp \
   alert.cpp \
   bloom.cpp \
-  chain.cpp \
   checkpoints.cpp \
   httprpc.cpp \
   httpserver.cpp \
@@ -259,9 +258,13 @@ libbitcoin_consensus_a_SOURCES = \
   arith_uint256.cpp \
   arith_uint256.h \
   consensus/merkle.cpp \
+  consensus/versionbits.cpp \
   consensus/merkle.h \
+  consensus/versionbits.h \
   consensus/params.h \
   consensus/validation.h \
+  chain.h \
+  chain.cpp \
   hash.cpp \
   hash.h \
   prevector.h \
