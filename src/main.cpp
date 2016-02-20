@@ -2081,7 +2081,8 @@ void PartitionCheck(bool (*initialDownloadCheck)(), CCriticalSection& cs, const 
     }
 }
 
-Consensus::VersionBitsConditionChecker* const softforkcheck[] = {};
+Consensus::VersionBitsConditionChecker checkCSV(Consensus::DEPLOYMENT_CSV);
+Consensus::VersionBitsConditionChecker* const softforkcheck[] = {&checkCSV};
 
 int32_t ComputeBlockVersion(const CBlockIndex* pindexPrev, const Consensus::Params& params)
 {
@@ -2215,6 +2216,11 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
     // blocks, when 75% of the network has upgraded:
     if (block.nVersion >= 4 && IsSuperMajority(4, pindex->pprev, chainparams.GetConsensus().nMajorityEnforceBlockUpgrade, chainparams.GetConsensus())) {
         flags |= SCRIPT_VERIFY_CHECKLOCKTIMEVERIFY;
+    }
+
+    // Start enforcing CHECKSEQUENCEVERIFY using versionbits logic.
+    if (checkCSV.IsActiveFor(pindex->pprev, chainparams.GetConsensus())) {
+        flags |= SCRIPT_VERIFY_CHECKSEQUENCEVERIFY;
     }
 
     int64_t nTime2 = GetTimeMicros(); nTimeForks += nTime2 - nTime1;
