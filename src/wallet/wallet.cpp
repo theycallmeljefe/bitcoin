@@ -1526,11 +1526,11 @@ std::vector<uint256> CWalletTx::GetPreimages() const
         }
 
         // Check whether it is using the hash locked branch
-        if (typ != TX_ATOMICSWAP || stack.size() != 3 || stack.back().size() != 1 || stack.back()[0] != 1 || (stack.end() - 2)->size() != 32) {
+        if (typ != TX_ATOMICSWAP || stack.size() < 2 || stack.back().size() != 32) {
             continue;
         }
         // Report
-        ret.push_back(uint256(*(stack.end() - 2)));
+        ret.push_back(uint256(stack.back()));
     }
 
     return ret;

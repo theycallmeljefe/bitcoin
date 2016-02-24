@@ -399,6 +399,15 @@ UniValue setmocktime(const UniValue& params, bool fHelp)
 
 UniValue createatomicswap(const UniValue& params, bool fHelp)
 {
+    if (fHelp || params.size() != 4)
+        throw runtime_error(
+            "createatomicswap seller_key refund_key hash timeout\n"
+            "\nCreate an address whose funds can be unlocked with a preimage or a timeout\n"
+            "\nArguments:\n"
+            "1. timestamp  (integer, required) Unix seconds-since-epoch timestamp\n"
+            "   Pass 0 to go back to using the system time."
+        );
+
     std::vector<unsigned char> seller_key = ParseHexV(params[0], "seller_key");
     std::vector<unsigned char> refund_key = ParseHexV(params[1], "refund_key");
     std::vector<unsigned char> h_key = ParseHexV(params[2], "h_key");
@@ -408,20 +417,10 @@ UniValue createatomicswap(const UniValue& params, bool fHelp)
     }
 
     CScript redeem_script;
-    redeem_script << OP_IF
-                  <<    OP_SHA256
-                  <<    h_key
-                  <<    OP_EQUALVERIFY
-                  <<    seller_key
-                  <<    OP_CHECKSIGVERIFY
-                  << OP_ELSE
-                  <<    CScriptNum(params[3].get_int64())
-                  <<    OP_CHECKLOCKTIMEVERIFY
-                  <<    OP_DROP
-                  <<    refund_key
-                  <<    OP_CHECKSIGVERIFY
-                  << OP_ENDIF
-                  << OP_TRUE;
+    redeem_script << OP_SHA256 << h_key << OP_EQUAL
+                  << OP_IF << seller_key
+                  << OP_ELSE << CScriptNum(params[3].get_int64()) << OP_CHECKLOCKTIMEVERIFY << OP_DROP << refund_key
+                  << OP_ENDIF << OP_CHECKSIG;
 
     UniValue result(UniValue::VOBJ);
     result.push_back(Pair("redeem_script", HexStr(redeem_script.begin(), redeem_script.end())));

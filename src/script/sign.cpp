@@ -106,24 +106,15 @@ static bool SignStep(const BaseSignatureCreator& creator, const CScript& scriptP
             if (!Sign1(keyID, creator, scriptPubKey, scriptSigRet)) {
                 return false;
             }
-            else
-            {
-                scriptSigRet << vector<unsigned char>(preimage.begin(), preimage.end());
-                scriptSigRet << OP_TRUE; // to select the first branch (preimage branch)
-            }
-            return true;
+            scriptSigRet << vector<unsigned char>(preimage.begin(), preimage.end()); // The valid preimage
         } else {
             keyID = CPubKey(vSolutions[3]).GetID();
             if (!Sign1(keyID, creator, scriptPubKey, scriptSigRet)) {
                 return false;
             }
-            else
-            {
-                scriptSigRet << OP_FALSE; // to select the second branch (CLTV branch)
-            }
-            return true;
+            scriptSigRet << OP_0; // An invalid preimage
         }
-        return false;
+        return true;
     }
     return false;
 }

@@ -56,20 +56,10 @@ bool Solver(const CScript& scriptPubKey, txnouttype& typeRet, vector<vector<unsi
 
         // Sender requests the preimage of a SHA256 hash
         mTemplates.insert(make_pair(TX_ATOMICSWAP, CScript()
-            <<  OP_IF
-            <<      OP_SHA256
-            <<      OP_ANYDATA // Preimage
-            <<      OP_EQUALVERIFY
-            <<      OP_PUBKEY
-            <<      OP_CHECKSIGVERIFY
-            <<  OP_ELSE
-            <<      OP_ANYDATA // Locktime
-            <<      OP_CHECKLOCKTIMEVERIFY
-            <<      OP_DROP
-            <<      OP_PUBKEY
-            <<      OP_CHECKSIGVERIFY
-            <<  OP_ENDIF
-            <<  OP_TRUE
+                  << OP_SHA256 << OP_ANYDATA << OP_EQUAL
+                  << OP_IF << OP_PUBKEY
+                  << OP_ELSE << OP_ANYDATA << OP_CHECKLOCKTIMEVERIFY << OP_DROP << OP_PUBKEY
+                  << OP_ENDIF << OP_CHECKSIG
         ));
     }
 
