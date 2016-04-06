@@ -628,6 +628,7 @@ void CNode::copyStats(CNodeStats &stats)
     X(mapRecvBytesPerMsgCmd);
     X(fWhitelisted);
 
+    stats.nInvsQueued = vInventoryToSend.size();
     // It is common for nodes with good ping times to suddenly become lagged,
     // due to a new block arriving or other large transfer.
     // Merely reporting pingtime might fool the caller into thinking the node was still responsive,

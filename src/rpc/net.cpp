@@ -107,6 +107,7 @@ UniValue getpeerinfo(const UniValue& params, bool fHelp)
             "    \"banscore\": n,             (numeric) The ban score\n"
             "    \"synced_headers\": n,       (numeric) The last header we have in common with this peer\n"
             "    \"synced_blocks\": n,        (numeric) The last block we have in common with this peer\n"
+            "    \"invs_queued\": n,          (numeric) Inventory items queued\n"
             "    \"inflight\": [\n"
             "       n,                        (numeric) The heights of blocks we're currently asking from this peer\n"
             "       ...\n"
@@ -172,6 +173,7 @@ UniValue getpeerinfo(const UniValue& params, bool fHelp)
             obj.push_back(Pair("inflight", heights));
         }
         obj.push_back(Pair("whitelisted", stats.fWhitelisted));
+        obj.push_back(Pair("invs_queued", stats.nInvsQueued));
 
         UniValue sendPerMsgCmd(UniValue::VOBJ);
         BOOST_FOREACH(const mapMsgCmdSize::value_type &i, stats.mapSendBytesPerMsgCmd) {

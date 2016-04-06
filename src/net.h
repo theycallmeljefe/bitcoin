@@ -208,6 +208,7 @@ public:
     double dPingWait;
     double dPingMin;
     std::string addrLocal;
+    size_t nInvsQueued;
 };
 
 
