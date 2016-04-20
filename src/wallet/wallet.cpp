@@ -3347,5 +3347,9 @@ int CMerkleTx::GetBlocksToMaturity() const
 bool CMerkleTx::AcceptToMemoryPool(bool fLimitFree, CAmount nAbsurdFee)
 {
     CValidationState state;
-    return ::AcceptToMemoryPool(mempool, state, *this, fLimitFree, NULL, NULL, false, nAbsurdFee);
+    bool ret = ::AcceptToMemoryPool(mempool, state, *this, fLimitFree, NULL, NULL, false, nAbsurdFee);
+    if (!ret) {
+        LogPrintf("Wallet transaction %s rejected by mempool: %s\n", GetHash().ToString(), FormatStateMessage(state));
+    }
+    return ret;
 }
