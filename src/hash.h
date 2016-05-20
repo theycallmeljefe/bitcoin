@@ -17,6 +17,8 @@
 
 typedef uint256 ChainCode;
 
+extern void GotHash(const unsigned char* hash);
+
 /** A hasher class for Bitcoin's 256-bit hash (double SHA-256). */
 class CHash256 {
 private:
@@ -28,6 +30,7 @@ public:
         unsigned char buf[sha.OUTPUT_SIZE];
         sha.Finalize(buf);
         sha.Reset().Write(buf, sha.OUTPUT_SIZE).Finalize(hash);
+        GotHash(hash);
     }
 
     CHash256& Write(const unsigned char *data, size_t len) {

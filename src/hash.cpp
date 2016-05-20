@@ -6,7 +6,23 @@
 #include "crypto/common.h"
 #include "crypto/hmac_sha512.h"
 #include "pubkey.h"
+#include <mutex>
+#include <map>
+#include <stdio.h>
+#include "uint256.h"
 
+
+void GotHash(const unsigned char* hash) {
+    static std::mutex mutex;
+    static std::map<uint256, int> table;
+    uint256 h;
+    memcpy(h.begin(), hash, 32);
+    std::lock_guard<std::mutex> lock(mutex);
+    auto i = table.insert(std::make_pair<uint256, int>(std::move(h), 0));
+    if (++i.first->second >= 6) {
+        fprintf(stderr, "Double computed hash: %s: %i\n", h.ToString().c_str(), i.first->second);
+    }
+}
 
 inline uint32_t ROTL32(uint32_t x, int8_t r)
 {
