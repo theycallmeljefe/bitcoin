@@ -427,7 +427,6 @@ public:
     bool fPingQueued;
     // Minimum fee rate with which to filter inv's to this node
     CAmount minFeeFilter;
-    CCriticalSection cs_feeFilter;
     CAmount lastSentFeeFilter;
     int64_t nextSendTimeFeeFilter;
 
