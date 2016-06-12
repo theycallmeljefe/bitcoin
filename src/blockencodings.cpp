@@ -13,6 +13,7 @@
 #include "main.h"
 #include "util.h"
 
+#include <unordered_map>
 
 #define MIN_TRANSACTION_SIZE 60
 
@@ -75,12 +76,20 @@ ReadStatus PartiallyDownloadedBlock::InitData(const CBlockHeaderAndShortTxIDs& c
     prefilled_count = cmpctblock.prefilledtxn.size();
 
     // Calculate map of txids -> positions and check mempool to see what we have (or dont)
-    std::map<uint64_t, uint16_t> shorttxids;
+    // Because well-formed cmpctblock messages will have a (relatively) uniform distribution
+    // of short IDs, any highly-uneven distribution of elements can be safely treated as a
+    // READ_STATUS_FAILED.
+    std::unordered_map<uint64_t, uint16_t> shorttxids(cmpctblock.shorttxids.size());
     uint16_t index_offset = 0;
     for (size_t i = 0; i < cmpctblock.shorttxids.size(); i++) {
         while (txn_available[i + index_offset])
             index_offset++;
         shorttxids[cmpctblock.shorttxids[i]] = i + index_offset;
+        // The math for a max bucket size of 10 is rather complicated, but simulation
+        // shows that, for blocks of up to 10k transactions, any individual bucket having
+        // more than 10 entries is highly unlikely.
+        if (shorttxids.bucket_size(shorttxids.bucket(cmpctblock.shorttxids[i])) > 10)
+            return READ_STATUS_FAILED;
     }
     // TODO: in the shortid-collision case, we should instead request both transactions
     // which collided. Falling back to full-block-request here is overkill.
@@ -92,7 +101,7 @@ ReadStatus PartiallyDownloadedBlock::InitData(const CBlockHeaderAndShortTxIDs& c
 
     LOCK(pool->cs);
     for (CTxMemPool::txiter it = pool->mapTx.begin(); it != pool->mapTx.end(); it++) {
-        std::map<uint64_t, uint16_t>::iterator idit = shorttxids.find(cmpctblock.GetShortID(it->GetTx().GetHash()));
+        std::unordered_map<uint64_t, uint16_t>::iterator idit = shorttxids.find(cmpctblock.GetShortID(it->GetTx().GetHash()));
         if (idit != shorttxids.end()) {
             if (!(have_txn[idit->second / 8] & (1 << (idit->second & 0x7)))) {
                 txn_available[idit->second] = it->GetSharedTx();
