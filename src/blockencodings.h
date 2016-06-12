@@ -192,7 +192,7 @@ public:
     CBlockHeader header;
     PartiallyDownloadedBlock(CTxMemPool* poolIn) : pool(poolIn) {}
 
-    ReadStatus InitData(const CBlockHeaderAndShortTxIDs& cmpctblock);
+    ReadStatus InitData(const CBlockHeaderAndShortTxIDs& cmpctblock, size_t max_mempool_txn_iterations=10000);
     bool IsTxAvailable(size_t index) const;
     ReadStatus FillBlock(CBlock& block, const std::vector<CTransaction>& vtx_missing) const;
 };

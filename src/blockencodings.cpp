@@ -47,7 +47,7 @@ uint64_t CBlockHeaderAndShortTxIDs::GetShortID(const uint256& txhash) const {
 
 
 
-ReadStatus PartiallyDownloadedBlock::InitData(const CBlockHeaderAndShortTxIDs& cmpctblock) {
+ReadStatus PartiallyDownloadedBlock::InitData(const CBlockHeaderAndShortTxIDs& cmpctblock, size_t max_mempool_txn_iterations) {
     if (cmpctblock.header.IsNull() || (cmpctblock.shorttxids.empty() && cmpctblock.prefilledtxn.empty()))
         return READ_STATUS_INVALID;
     if (cmpctblock.shorttxids.size() + cmpctblock.prefilledtxn.size() > MAX_BLOCK_SIZE / MIN_TRANSACTION_SIZE)
@@ -100,15 +100,15 @@ ReadStatus PartiallyDownloadedBlock::InitData(const CBlockHeaderAndShortTxIDs& c
     memset(have_txn, 0, txn_available.size() / 8 + 1);
 
     LOCK(pool->cs);
-    CTxMemPool::txiter it = pool->mapTx.begin();
+    CTxMemPool::indexed_transaction_set::index<mining_score>::type::iterator it = pool->mapTx.get<mining_score>().begin();
     uint256 thishash; // We prefetch the next hash we need to speed up memory access
-    if (it != pool->mapTx.end())
+    if (it != pool->mapTx.get<mining_score>().end())
         thishash = it->GetTx().GetHash();
-    while (it != pool->mapTx.end()) {
+    for (uint32_t i = 0; i < max_mempool_txn_iterations && it != pool->mapTx.get<mining_score>().end(); i++) {
         const CTxMemPoolEntry* entry = &(*it);
         uint64_t shortid = cmpctblock.GetShortID(thishash);
         it++;
-        if (it != pool->mapTx.end())
+        if (it != pool->mapTx.get<mining_score>().end())
             thishash = it->GetTx().GetHash();
         std::unordered_map<uint64_t, uint16_t>::iterator idit = shorttxids.find(shortid);
         if (idit != shorttxids.end()) {
