@@ -100,11 +100,20 @@ ReadStatus PartiallyDownloadedBlock::InitData(const CBlockHeaderAndShortTxIDs& c
     memset(have_txn, 0, txn_available.size() / 8 + 1);
 
     LOCK(pool->cs);
-    for (CTxMemPool::txiter it = pool->mapTx.begin(); it != pool->mapTx.end(); it++) {
-        std::unordered_map<uint64_t, uint16_t>::iterator idit = shorttxids.find(cmpctblock.GetShortID(it->GetTx().GetHash()));
+    CTxMemPool::txiter it = pool->mapTx.begin();
+    uint256 thishash; // We prefetch the next hash we need to speed up memory access
+    if (it != pool->mapTx.end())
+        thishash = it->GetTx().GetHash();
+    while (it != pool->mapTx.end()) {
+        const CTxMemPoolEntry* entry = &(*it);
+        uint64_t shortid = cmpctblock.GetShortID(thishash);
+        it++;
+        if (it != pool->mapTx.end())
+            thishash = it->GetTx().GetHash();
+        std::unordered_map<uint64_t, uint16_t>::iterator idit = shorttxids.find(shortid);
         if (idit != shorttxids.end()) {
             if (!(have_txn[idit->second / 8] & (1 << (idit->second & 0x7)))) {
-                txn_available[idit->second] = it->GetSharedTx();
+                txn_available[idit->second] = entry->GetSharedTx();
                 have_txn[idit->second / 8] |= 1 << (idit->second & 0x7);
                 mempool_count++;
             } else {
