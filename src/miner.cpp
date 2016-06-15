@@ -204,15 +204,9 @@ bool BlockAssembler::TestPackage(uint64_t packageSize, unsigned int packageSigOp
 // are final.
 bool BlockAssembler::TestPackageFinality(const CTxMemPool::setEntries& package)
 {
-    uint64_t potentialBlockSize = nBlockSize;
-    unsigned int potentialBlockSigOps = nBlockSigOps;
     BOOST_FOREACH (const CTxMemPool::txiter it, package) {
         if (!IsFinalTx(it->GetTx(), nHeight, nLockTimeCutoff))
             return false;
-        potentialBlockSize += it->GetTxSize();
-        assert(potentialBlockSize < nBlockMaxSize);
-        potentialBlockSigOps += it->GetSigOpCount();
-        assert (potentialBlockSigOps < MAX_BLOCK_SIGOPS);
     }
     return true;
 }
