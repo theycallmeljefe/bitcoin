@@ -400,7 +400,7 @@ void BlockAssembler::addPackageTxs()
     CTxMemPool::setEntries failedTx;
 
     // Start by adding all descendants of previously added txs to mapModifiedTx
-    // and modifiying them for their already included ancestors
+    // and modifying them for their already included ancestors
     UpdatePackagesForAdded(inBlock, mapModifiedTx);
 
     CTxMemPool::indexed_transaction_set::index<ancestor_score>::type::iterator mi = mempool.mapTx.get<ancestor_score>().begin();
