@@ -79,7 +79,7 @@ static const ServiceFlags nRelevantServices = ServiceFlags(NODE_NETWORK | NODE_W
 //
 bool fDiscover = true;
 bool fListen = true;
-ServiceFlags nLocalServices = ServiceFlags(NODE_NETWORK | NODE_WITNESS);
+ServiceFlags nLocalServices = NODE_NETWORK;
 bool fRelayTxes = true;
 CCriticalSection cs_mapLocalHost;
 std::map<CNetAddr, LocalServiceInfo> mapLocalHost;

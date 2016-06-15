@@ -102,8 +102,8 @@ public:
 
         // Deployment of SegWit (BIP141 and BIP143)
         consensus.vDeployments[Consensus::DEPLOYMENT_WITNESS].bit = 1;
-        consensus.vDeployments[Consensus::DEPLOYMENT_WITNESS].nStartTime = 2000000000; // Far in the future
-        consensus.vDeployments[Consensus::DEPLOYMENT_WITNESS].nTimeout = 2100000000;
+        consensus.vDeployments[Consensus::DEPLOYMENT_WITNESS].nStartTime = 0;
+        consensus.vDeployments[Consensus::DEPLOYMENT_WITNESS].nTimeout = 0; // Never / undefined
 
         /**
          * The message start string is designed to be unlikely to occur in normal data.
