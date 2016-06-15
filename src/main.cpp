@@ -1243,7 +1243,7 @@ bool AcceptToMemoryPoolWorker(CTxMemPool& pool, CValidationState& state, const C
         // intersect.
         BOOST_FOREACH(CTxMemPool::txiter ancestorIt, setAncestors)
         {
-            const uint256 &hashAncestor = ancestorIt->GetTx().GetHash();
+            const uint256 &hashAncestor = ancestorIt->GetTxid();
             if (setConflicts.count(hashAncestor))
             {
                 return state.DoS(10, false,
@@ -1404,7 +1404,7 @@ bool AcceptToMemoryPoolWorker(CTxMemPool& pool, CValidationState& state, const C
         BOOST_FOREACH(const CTxMemPool::txiter it, allConflicting)
         {
             LogPrint("mempool", "replacing tx %s with %s for %s BTC additional fees, %d delta bytes\n",
-                    it->GetTx().GetHash().ToString(),
+                    it->GetTxid().ToString(),
                     hash.ToString(),
                     FormatMoney(nModifiedFees - nConflictingFees),
                     (int)nSize - (int)nConflictingSize);

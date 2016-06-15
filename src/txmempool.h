@@ -77,6 +77,7 @@ class CTxMemPoolEntry
 {
 private:
     std::shared_ptr<const CTransaction> tx;
+    const uint256 *txid;       //!< Cached to avoid traversing the shared_ptr tx
     CAmount nFee;              //!< Cached to avoid expensive parent-transaction lookups
     size_t nTxSize;            //!< ... and avoid recomputing tx size
     size_t nModSize;           //!< ... and modified size for priority
@@ -129,6 +130,7 @@ public:
     int64_t GetModifiedFee() const { return nFee + feeDelta; }
     size_t DynamicMemoryUsage() const { return nUsageSize; }
     const LockPoints& GetLockPoints() const { return lockPoints; }
+    const uint256& GetTxid() const { return *txid; }
 
     // Adjusts the descendant state, if this entry is not dirty.
     void UpdateDescendantState(int64_t modifySize, CAmount modifyFee, int64_t modifyCount);
@@ -210,7 +212,7 @@ struct mempoolentry_txid
     typedef uint256 result_type;
     result_type operator() (const CTxMemPoolEntry &entry) const
     {
-        return entry.GetTx().GetHash();
+        return entry.GetTxid();
     }
 };
 
