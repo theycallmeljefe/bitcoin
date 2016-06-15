@@ -100,8 +100,6 @@ void BlockAssembler::resetBlock()
 
     lastFewTxs = 0;
     blockFinished = false;
-
-    mapModifiedTx.clear();
 }
 
 CBlockTemplate* BlockAssembler::CreateNewBlock(const CScript& scriptPubKeyIn)
@@ -337,7 +335,8 @@ void BlockAssembler::addScoreTxs()
     }
 }
 
-void BlockAssembler::UpdatePackagesForAdded(const CTxMemPool::setEntries& alreadyAdded)
+void BlockAssembler::UpdatePackagesForAdded(const CTxMemPool::setEntries& alreadyAdded,
+        indexed_modified_transaction_set &mapModifiedTx)
 {
     BOOST_FOREACH(const CTxMemPool::txiter it, alreadyAdded) {
         CTxMemPool::setEntries descendants;
@@ -369,7 +368,7 @@ void BlockAssembler::UpdatePackagesForAdded(const CTxMemPool::setEntries& alread
 // guaranteed to fail again, but as a belt-and-suspenders check we put it in
 // failedTx and avoid re-evaluation, since the re-evaluation would be using
 // cached size/sigops/fee values that are not actually correct.
-bool BlockAssembler::SkipMapTxEntry(CTxMemPool::txiter it)
+bool BlockAssembler::SkipMapTxEntry(CTxMemPool::txiter it, indexed_modified_transaction_set &mapModifiedTx, CTxMemPool::setEntries &failedTx)
 {
     assert (it != mempool.mapTx.end());
     if (mapModifiedTx.count(it->GetTx().GetHash()) || inBlock.count(it) || failedTx.count(it))
@@ -400,9 +399,15 @@ void BlockAssembler::SortForBlock(const CTxMemPool::setEntries& package, CTxMemP
 // transaction package to work on next.
 void BlockAssembler::addPackageTxs()
 {
+    // mapModifiedTx will store sorted packages after they are modified
+    // because some of their txs are already in the block
+    indexed_modified_transaction_set mapModifiedTx;
+    // Keep track of entries that failed inclusion, to avoid duplicate work
+    CTxMemPool::setEntries failedTx;
+
     // Start by adding all descendants of previously added txs to mapModifiedTx
     // and modifiying them for their already included ancestors
-    UpdatePackagesForAdded(inBlock);
+    UpdatePackagesForAdded(inBlock, mapModifiedTx);
 
     CTxMemPool::indexed_transaction_set::index<ancestor_score>::type::iterator mi = mempool.mapTx.get<ancestor_score>().begin();
     CTxMemPool::txiter iter;
@@ -410,7 +415,7 @@ void BlockAssembler::addPackageTxs()
     {
         // First try to find a new transaction in mapTx to evaluate.
         if (mi != mempool.mapTx.get<ancestor_score>().end() &&
-                SkipMapTxEntry(mempool.mapTx.project<0>(mi))) {
+                SkipMapTxEntry(mempool.mapTx.project<0>(mi), mapModifiedTx, failedTx)) {
             ++mi;
             continue;
         }
@@ -498,7 +503,7 @@ void BlockAssembler::addPackageTxs()
         }
 
         // Update transactions that depend on each of these
-        UpdatePackagesForAdded(ancestors);
+        UpdatePackagesForAdded(ancestors, mapModifiedTx);
     }
 }
 
