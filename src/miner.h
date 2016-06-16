@@ -48,11 +48,23 @@ struct CTxMemPoolModifiedEntry {
     unsigned int nSigOpCountWithAncestors;
 };
 
-struct modifiedentry_txid {
-    typedef uint256 result_type;
+/** Comparator for CTxMemPool::txiter objects.
+ *  It simply compares the internal memory address of the CTxMemPoolEntry object
+ *  pointed to. This means it has no meaning, and is only useful for using them
+ *  as key in other indexes.
+ */
+struct CompareCTxMemPoolIter {
+    bool operator()(const CTxMemPool::txiter& a, const CTxMemPool::txiter& b) const
+    {
+        return &(*a) < &(*b);
+    }
+};
+
+struct modifiedentry_iter {
+    typedef CTxMemPool::txiter result_type;
     result_type operator() (const CTxMemPoolModifiedEntry &entry) const
     {
-        return entry.iter->GetTx().GetHash();
+        return entry.iter;
     }
 };
 
@@ -86,7 +98,10 @@ struct CompareTxIterByAncestorCount {
 typedef boost::multi_index_container<
     CTxMemPoolModifiedEntry,
     boost::multi_index::indexed_by<
-        boost::multi_index::ordered_unique<modifiedentry_txid>,
+        boost::multi_index::ordered_unique<
+            modifiedentry_iter,
+            CompareCTxMemPoolIter
+        >,
         // sorted by modified ancestor fee rate
         boost::multi_index::ordered_non_unique<
             // Reuse same tag from CTxMemPool's similar index

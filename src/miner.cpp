@@ -339,7 +339,7 @@ void BlockAssembler::UpdatePackagesForAdded(const CTxMemPool::setEntries& alread
         BOOST_FOREACH(CTxMemPool::txiter desc, descendants) {
             if (alreadyAdded.count(desc))
                 continue;
-            modtxiter mit = mapModifiedTx.find(desc->GetTx().GetHash());
+            modtxiter mit = mapModifiedTx.find(desc);
             if (mit == mapModifiedTx.end()) {
                 CTxMemPoolModifiedEntry modEntry(desc);
                 modEntry.nSizeWithAncestors -= it->GetTxSize();
@@ -365,7 +365,7 @@ void BlockAssembler::UpdatePackagesForAdded(const CTxMemPool::setEntries& alread
 bool BlockAssembler::SkipMapTxEntry(CTxMemPool::txiter it, indexed_modified_transaction_set &mapModifiedTx, CTxMemPool::setEntries &failedTx)
 {
     assert (it != mempool.mapTx.end());
-    if (mapModifiedTx.count(it->GetTx().GetHash()) || inBlock.count(it) || failedTx.count(it))
+    if (mapModifiedTx.count(it) || inBlock.count(it) || failedTx.count(it))
         return true;
     return false;
 }
@@ -493,7 +493,7 @@ void BlockAssembler::addPackageTxs()
         for (size_t i=0; i<sortedEntries.size(); ++i) {
             AddToBlock(sortedEntries[i]);
             // Erase from the modified set, if present
-            mapModifiedTx.erase(sortedEntries[i]->GetTx().GetHash());
+            mapModifiedTx.erase(sortedEntries[i]);
         }
 
         // Update transactions that depend on each of these
