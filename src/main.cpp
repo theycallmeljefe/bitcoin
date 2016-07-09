@@ -2785,6 +2785,123 @@ static int64_t nTimeFlush = 0;
 static int64_t nTimeChainState = 0;
 static int64_t nTimePostConnect = 0;
 
+struct Stats
+{
+    uint64_t nTransactions = 0;
+    uint64_t nTransactionOutputs = 0;
+    uint64_t nTotalSize = 0;
+    uint64_t nAmount = 0;
+};
+
+struct StatsArray
+{
+    Stats stats[25];
+};
+
+//! Calculate statistics about the unspent transaction output set
+static void GetUTXOStats()
+{
+    static const int64_t limits[] = {1,2,5,10,22,46,100,215,464,1000,2154,4642,10000,21544,46416,100000,215444,464159,1000000,2154435,4641589,10000000,21544347,46415888,100000000};
+    int height = 0;
+    uint64_t nTime = 0;
+    uint256 hashBlock;
+    StatsArray all = {};
+    std::map<int, StatsArray> broken;
+
+    boost::scoped_ptr<CCoinsViewCursor> pcursor;
+
+    {
+        LOCK(cs_main);
+        pcoinsTip->Flush();
+        pcursor.reset(pcoinsTip->Cursor());
+        hashBlock = pcursor->GetBestBlock();
+        height = mapBlockIndex.find(hashBlock)->second->nHeight;
+        nTime = mapBlockIndex.find(hashBlock)->second->GetMedianTimePast();
+    }
+
+    while (pcursor->Valid()) {
+        boost::this_thread::interruption_point();
+        uint256 key;
+        CCoins coins;
+        if (pcursor->GetKey(key) && pcursor->GetValue(coins)) {
+            for (int i = 0; i < 25; i++) {
+                for (unsigned int j=0; j<coins.vout.size(); j++) {
+                    CTxOut &out = coins.vout[j];
+                    if (out.nValue < limits[i]) {
+                        out.SetNull();
+                    }
+                }
+                coins.Cleanup();
+                if (!coins.IsPruned()) {
+                    StatsArray& brok = broken[coins.nHeight / 1000];
+                    all.stats[i].nTransactions++;
+                    brok.stats[i].nTransactions++;
+                    for (unsigned int j=0; j<coins.vout.size(); j++) {
+                        const CTxOut &out = coins.vout[j];
+                        if (!out.IsNull()) {
+                            all.stats[i].nTransactionOutputs++;
+                            all.stats[i].nAmount += out.nValue;
+                            brok.stats[i].nTransactionOutputs++;
+                            brok.stats[i].nAmount += out.nValue;
+                        }
+                    }
+                    all.stats[i].nTotalSize += 32 + ::GetSerializeSize(coins, SER_DISK, CLIENT_VERSION);
+                    brok.stats[i].nTotalSize += 32 + ::GetSerializeSize(coins, SER_DISK, CLIENT_VERSION);
+                }
+            }
+        } else {
+            return;
+        }
+        pcursor->Next();
+    }
+
+    std::string strTx, strTxOut, strSize, strAmount;
+    for (int i = 0; i < 25; i++) {
+        if (i) {
+            strTx += " ";
+            strTxOut += " ";
+            strSize += " ";
+            strAmount += " ";
+        }
+        strTx += strprintf("%i", all.stats[i].nTransactions);
+        strTxOut += strprintf("%i", all.stats[i].nTransactionOutputs);
+        strSize += strprintf("%i", all.stats[i].nTotalSize);
+        strAmount += strprintf("%i", all.stats[i].nAmount);
+        all.stats[i].nTransactions = 0;
+        all.stats[i].nTransactionOutputs = 0;
+        all.stats[i].nTotalSize = 0;
+        all.stats[i].nAmount = 0;
+    }
+    LogPrintf("STATS %i %i %s %s %s %s %s\n", height, nTime, hashBlock.ToString(), strTx, strTxOut, strSize, strAmount);
+
+    {
+        LOCK(cs_main);
+        FILE* file = fopen(strprintf("utxostats_%i_%i_%s.dat", height, nTime, hashBlock.ToString()).c_str(), "wt");
+        for (const std::pair<int, StatsArray>& it : broken) {
+            std::string strTx, strTxOut, strSize, strAmount;
+            for (int i = 0; i < 25; i++) {
+                if (i) {
+                    strTx += " ";
+                    strTxOut += " ";
+                    strSize += " ";
+                    strAmount += " ";
+                }
+                strTx += strprintf("%i", all.stats[i].nTransactions);
+                strTxOut += strprintf("%i", all.stats[i].nTransactionOutputs);
+                strSize += strprintf("%i", all.stats[i].nTotalSize);
+                strAmount += strprintf("%i", all.stats[i].nAmount);
+                all.stats[i].nTransactions += it.second.stats[i].nTransactions;
+                all.stats[i].nTransactionOutputs += it.second.stats[i].nTransactionOutputs;
+                all.stats[i].nTotalSize += it.second.stats[i].nTotalSize;
+                all.stats[i].nAmount += it.second.stats[i].nAmount;
+            }
+            CBlockIndex* pindex = chainActive[it.first * 1000];
+            fprintf(file, "BROKEN %i %lu %s %s %s %s %s\n", (int)pindex->nHeight, (unsigned long)pindex->GetMedianTimePast(), pindex->GetBlockHash().ToString().c_str(), strTx.c_str(), strTxOut.c_str(), strSize.c_str(), strAmount.c_str());
+        }
+        fclose(file);
+    }
+}
+
 /**
  * Connect a new block to chainActive. pblock is either NULL or a pointer to a CBlock
  * corresponding to pindexNew, to bypass loading it again from disk.
@@ -2843,6 +2960,11 @@ bool static ConnectTip(CValidationState& state, const CChainParams& chainparams,
     int64_t nTime6 = GetTimeMicros(); nTimePostConnect += nTime6 - nTime5; nTimeTotal += nTime6 - nTime1;
     LogPrint("bench", "  - Connect postprocess: %.2fms [%.2fs]\n", (nTime6 - nTime5) * 0.001, nTimePostConnect * 0.000001);
     LogPrint("bench", "- Connect block: %.2fms [%.2fs]\n", (nTime6 - nTime1) * 0.001, nTimeTotal * 0.000001);
+
+    if (pindexNew->pprev && (pindexNew->nHeight % 1000) == 0) {
+        GetUTXOStats();
+    }
+
     return true;
 }
 
