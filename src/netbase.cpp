@@ -659,7 +659,7 @@ bool LookupSubNet(const char* pszName, CSubNet& ret)
             std::string strNetmask = strSubnet.substr(slash + 1);
             int32_t n;
             // IPv4 addresses start at offset 12, and first 12 bytes must match, so just offset n
-            if (ParseInt32(strNetmask, &n)) { // If valid number, assume /24 symtex
+            if (ParseInt32(strNetmask, &n)) { // If valid number, assume /24 syntax
                 ret = CSubNet(network, n);
                 return ret.IsValid();
             }
