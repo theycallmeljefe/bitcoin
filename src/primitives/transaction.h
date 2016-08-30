@@ -464,4 +464,6 @@ struct CMutableTransaction
 /** Compute the weight of a transaction, as defined by BIP 141 */
 int64_t GetTransactionWeight(const CTransaction &tx);
 
+int64_t GetTransactionSigHashSize(const CTransaction &tx);
+
 #endif // BITCOIN_PRIMITIVES_TRANSACTION_H

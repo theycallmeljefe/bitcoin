@@ -153,3 +153,12 @@ int64_t GetTransactionWeight(const CTransaction& tx)
 {
     return ::GetSerializeSize(tx, SER_NETWORK, PROTOCOL_VERSION | SERIALIZE_TRANSACTION_NO_WITNESS) * (WITNESS_SCALE_FACTOR -1) + ::GetSerializeSize(tx, SER_NETWORK, PROTOCOL_VERSION);
 }
+
+int64_t GetTransactionSigHashSize(const CTransaction& tx)
+{
+    size_t size = ::GetSerializeSize(tx, SER_NETWORK, PROTOCOL_VERSION | SERIALIZE_TRANSACTION_NO_WITNESS);
+    for (unsigned int i = 0; i < tx.vin.size(); i++) {
+        size -= tx.vin[i].scriptSig.size();
+    }
+    return size;
+}

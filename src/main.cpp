@@ -1041,6 +1041,22 @@ int64_t GetTransactionSigOpCost(const CTransaction& tx, const CCoinsViewCache& i
     return nSigOps;
 }
 
+unsigned int GetAccurateBaseSigOpCount(const CTransaction& tx, const CCoinsViewCache& inputs, int flags)
+{
+    if (tx.IsCoinBase())
+        return 0;
+    unsigned int nSigOps = 0;
+    for (unsigned int i = 0; i < tx.vin.size(); i++)
+    {
+        nSigOps += tx.vin[i].scriptSig.GetSigOpCount(true);
+        const CTxOut &prevout = inputs.GetOutputFor(tx.vin[i]);
+        nSigOps += prevout.scriptPubKey.GetSigOpCount(true);
+        if (flags & SCRIPT_VERIFY_P2SH && prevout.scriptPubKey.IsPayToScriptHash())
+            nSigOps += prevout.scriptPubKey.GetSigOpCount(tx.vin[i].scriptSig);
+    }
+    return nSigOps;
+}
+
 
 
 
@@ -2405,6 +2421,7 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
     std::vector<std::pair<uint256, CDiskTxPos> > vPos;
     vPos.reserve(block.vtx.size());
     blockundo.vtxundo.reserve(block.vtx.size() - 1);
+    std::string tmp;
     for (unsigned int i = 0; i < block.vtx.size(); i++)
     {
         const CTransaction &tx = block.vtx[i];
@@ -2461,6 +2478,11 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
                 return error("ConnectBlock(): CheckInputs on %s failed with %s",
                     tx.GetHash().ToString(), FormatStateMessage(state));
             control.Add(vChecks);
+        }
+
+        if (IsStandardTx(tx, tmp, true) && AreInputsStandard(tx, view)) {
+            int64_t hashsize = GetTransactionSigHashSize(tx) * GetAccurateBaseSigOpCount(tx, view, STANDARD_SCRIPT_VERIFY_FLAGS);
+            LogPrintf("TXHASHSIZE %s %u\n", tx.GetHash().ToString(), hashsize);
         }
 
         CTxUndo undoDummy;
