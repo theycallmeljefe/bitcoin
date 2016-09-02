@@ -113,6 +113,7 @@ testScripts = [
     'txn_doublespend.py --mineblock',
     'p2p-segwit.py',
     'segwit.py',
+    'sighashcache.py',
     'txn_clone.py',
     'getchaintips.py',
     'rawtransactions.py',
