@@ -251,7 +251,6 @@ static vector<valtype> CombineMultisig(const CScript& scriptPubKey, const BaseSi
     unsigned int nSigsRequired = vSolutions.front()[0];
     unsigned int nPubKeys = vSolutions.size()-2;
     map<valtype, valtype> sigs;
-    SigHashCache cache;
     BOOST_FOREACH(const valtype& sig, allsigs)
     {
         for (unsigned int i = 0; i < nPubKeys; i++)
@@ -260,7 +259,7 @@ static vector<valtype> CombineMultisig(const CScript& scriptPubKey, const BaseSi
             if (sigs.count(pubkey))
                 continue; // Already got a sig for this pubkey
 
-            if (checker.CheckSig(sig, pubkey, scriptPubKey, sigversion, cache))
+            if (checker.CheckSig(sig, pubkey, scriptPubKey, sigversion))
             {
                 sigs[pubkey] = sig;
                 break;
