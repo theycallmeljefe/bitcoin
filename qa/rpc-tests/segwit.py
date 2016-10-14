@@ -609,8 +609,8 @@ class SegWitTest(BitcoinTestFramework):
         # not in the wallet
         # note that no witness address should be returned by insolvable addresses
         # note that merely solvable address are rejected without explictly added with importaddress first
-        for i in uncompressed_spendable_address + uncompressed_solvable_address + unknown_address + insolvable_address + [compressed_solvable_address[1]] : # TODO: fix the P2WPKH watch bug and disable
-        # for i in uncompressed_spendable_address + uncompressed_solvable_address + unknown_address + insolvable_address + compressed_solvable_address : # TODO: fix the P2WPKH watch bug and enable
+        # for i in uncompressed_spendable_address + uncompressed_solvable_address + unknown_address + insolvable_address + [compressed_solvable_address[1]] : # TODO: fix the P2WPKH watch bug and disable
+        for i in uncompressed_spendable_address + uncompressed_solvable_address + unknown_address + insolvable_address + [compressed_solvable_address[1]] : # TODO: fix the P2WPKH watch bug and enable
             try:
                 self.nodes[0].addwitnessaddress(i)
             except JSONRPCException as exp:
@@ -619,9 +619,11 @@ class SegWitTest(BitcoinTestFramework):
                 #print (i)
                 assert(False)
 
-        for i in compressed_spendable_address:
+        for i in compressed_spendable_address + [compressed_solvable_address[0]]:
             witaddress = self.nodes[0].addwitnessaddress(i)
             # addwitnessaddress should return the same address if it is a known P2SH-P2WSH address
+            print (i)
+            print (witaddress)
             assert_equal(witaddress, self.nodes[0].addwitnessaddress(witaddress))
 
         self.mine_and_test_listunspent(spendable_anytime + spendable_after_addwitnessaddress, 2)
