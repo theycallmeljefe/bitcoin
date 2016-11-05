@@ -74,35 +74,15 @@ int64_t UpdateTime(CBlockHeader* pblock, const Consensus::Params& consensusParam
     return nNewTime - nOldTime;
 }
 
-BlockAssembler::BlockAssembler(const CChainParams& _chainparams)
+
+BlockAssembler::BlockAssembler(const CChainParams& _chainparams, unsigned int nMaxWeight, unsigned int nMaxSize)
     : chainparams(_chainparams)
 {
-    // Block resource limits
-    // If neither -blockmaxsize or -blockmaxweight is given, limit to DEFAULT_BLOCK_MAX_*
-    // If only one is given, only restrict the specified resource.
-    // If both are given, restrict both.
-    nBlockMaxWeight = DEFAULT_BLOCK_MAX_WEIGHT;
-    nBlockMaxSize = DEFAULT_BLOCK_MAX_SIZE;
-    bool fWeightSet = false;
-    if (mapArgs.count("-blockmaxweight")) {
-        nBlockMaxWeight = GetArg("-blockmaxweight", DEFAULT_BLOCK_MAX_WEIGHT);
-        nBlockMaxSize = MAX_BLOCK_SERIALIZED_SIZE;
-        fWeightSet = true;
-    }
-    if (mapArgs.count("-blockmaxsize")) {
-        nBlockMaxSize = GetArg("-blockmaxsize", DEFAULT_BLOCK_MAX_SIZE);
-        if (!fWeightSet) {
-            nBlockMaxWeight = nBlockMaxSize * WITNESS_SCALE_FACTOR;
-        }
-    }
-
-    // Limit weight to between 4K and MAX_BLOCK_WEIGHT-4K for sanity:
-    nBlockMaxWeight = std::max((unsigned int)4000, std::min((unsigned int)(MAX_BLOCK_WEIGHT-4000), nBlockMaxWeight));
-    // Limit size to between 1K and MAX_BLOCK_SERIALIZED_SIZE-1K for sanity:
-    nBlockMaxSize = std::max((unsigned int)1000, std::min((unsigned int)(MAX_BLOCK_SERIALIZED_SIZE-1000), nBlockMaxSize));
+    nBlockMaxWeight = nMaxWeight;
+    nBlockMaxSize = nMaxSize;
 
     // Whether we need to account for byte usage (in addition to weight usage)
-    fNeedSizeAccounting = (nBlockMaxSize < MAX_BLOCK_SERIALIZED_SIZE-1000);
+    fNeedSizeAccounting = (nBlockMaxSize < nMaxWeight);
 }
 
 void BlockAssembler::resetBlock()

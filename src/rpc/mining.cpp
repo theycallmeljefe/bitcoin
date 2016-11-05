@@ -15,6 +15,7 @@
 #include "main.h"
 #include "miner.h"
 #include "net.h"
+#include "policy/policy.h"
 #include "pow.h"
 #include "rpc/server.h"
 #include "txmempool.h"
@@ -96,6 +97,34 @@ UniValue getnetworkhashps(const JSONRPCRequest& request)
     return GetNetworkHashPS(request.params.size() > 0 ? request.params[0].get_int() : 120, request.params.size() > 1 ? request.params[1].get_int() : -1);
 }
 
+static BlockAssembler CreateDefaultAssembler() {
+    // Block resource limits
+    // If neither -blockmaxsize or -blockmaxweight is given, limit to DEFAULT_BLOCK_MAX_*
+    // If only one is given, only restrict the specified resource.
+    // If both are given, restrict both.
+    unsigned int nBlockMaxWeight = DEFAULT_BLOCK_MAX_WEIGHT;
+    unsigned int nBlockMaxSize = DEFAULT_BLOCK_MAX_SIZE;
+    bool fWeightSet = false;
+    if (mapArgs.count("-blockmaxweight")) {
+        nBlockMaxWeight = GetArg("-blockmaxweight", DEFAULT_BLOCK_MAX_WEIGHT);
+        nBlockMaxSize = MAX_BLOCK_SERIALIZED_SIZE;
+        fWeightSet = true;
+    }
+    if (mapArgs.count("-blockmaxsize")) {
+        nBlockMaxSize = GetArg("-blockmaxsize", DEFAULT_BLOCK_MAX_SIZE);
+        if (!fWeightSet) {
+            nBlockMaxWeight = nBlockMaxSize * WITNESS_SCALE_FACTOR;
+        }
+    }
+
+    // Limit weight to between 4K and MAX_BLOCK_WEIGHT-4K for sanity:
+    nBlockMaxWeight = std::max((unsigned int)4000, std::min((unsigned int)(MAX_BLOCK_WEIGHT-4000), nBlockMaxWeight));
+    // Limit size to between 1K and MAX_BLOCK_SERIALIZED_SIZE-1K for sanity:
+    nBlockMaxSize = std::max((unsigned int)1000, std::min((unsigned int)(MAX_BLOCK_SERIALIZED_SIZE-1000), nBlockMaxSize));
+
+    return BlockAssembler(Params(), nBlockMaxWeight, nBlockMaxSize);
+}
+
 UniValue generateBlocks(boost::shared_ptr<CReserveScript> coinbaseScript, int nGenerate, uint64_t nMaxTries, bool keepScript)
 {
     static const int nInnerLoopCount = 0x10000;
@@ -113,7 +142,7 @@ UniValue generateBlocks(boost::shared_ptr<CReserveScript> coinbaseScript, int nG
     UniValue blockHashes(UniValue::VARR);
     while (nHeight < nHeightEnd)
     {
-        std::unique_ptr<CBlockTemplate> pblocktemplate(BlockAssembler(Params()).CreateNewBlock(coinbaseScript->reserveScript));
+        std::unique_ptr<CBlockTemplate> pblocktemplate(CreateDefaultAssembler().CreateNewBlock(coinbaseScript->reserveScript));
         if (!pblocktemplate.get())
             throw JSONRPCError(RPC_INTERNAL_ERROR, "Couldn't create new block");
         CBlock *pblock = &pblocktemplate->block;
@@ -536,7 +565,7 @@ UniValue getblocktemplate(const JSONRPCRequest& request)
 
         // Create new block
         CScript scriptDummy = CScript() << OP_TRUE;
-        pblocktemplate = BlockAssembler(Params()).CreateNewBlock(scriptDummy);
+        pblocktemplate = CreateDefaultAssembler().CreateNewBlock(scriptDummy);
         if (!pblocktemplate)
             throw JSONRPCError(RPC_OUT_OF_MEMORY, "Out of memory");
 
