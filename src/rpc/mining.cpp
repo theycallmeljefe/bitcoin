@@ -344,6 +344,32 @@ std::string gbt_vb_name(const Consensus::DeploymentPos pos) {
     return s;
 }
 
+UniValue getblockfeestats(const JSONRPCRequest& request)
+{
+    UniValue result(UniValue::VARR);
+
+    LOCK(cs_main);
+    BlockAssembler bas(Params(), MAX_BLOCK_WEIGHT, MAX_BLOCK_SERIALIZED_SIZE);
+    for (int n = 0; n < 16; n++) {
+        auto pblk = bas.CreateNewBlock(CScript(), false);
+        if (pblk->block.vtx.size() <= 1) {
+            break;
+        }
+        CAmount fees = 0;
+        UniValue o(UniValue::VOBJ);
+        for (size_t i = 1; i < pblk->block.vtx.size(); i++) {
+            fees += pblk->vTxFees[i];
+        }
+        o.push_back(Pair("fees", ValueFromAmount(fees)));
+        o.push_back(Pair("ntx", pblk->block.vtx.size()));
+        o.push_back(Pair("weight", GetBlockWeight(pblk->block)));
+        o.push_back(Pair("minfeerate", ValueFromAmount(pblk->nMinPackageFeeRate)));
+        result.push_back(o);
+    }
+
+    return result;
+}
+
 UniValue getblocktemplate(const JSONRPCRequest& request)
 {
     if (request.fHelp || request.params.size() > 1)
@@ -941,6 +967,7 @@ static const CRPCCommand commands[] =
     { "mining",             "prioritisetransaction",  &prioritisetransaction,  true  },
     { "mining",             "getblocktemplate",       &getblocktemplate,       true  },
     { "mining",             "submitblock",            &submitblock,            true  },
+    { "mining",             "getblockfeestats",       &getblockfeestats,       true  },
 
     { "generating",         "generate",               &generate,               true  },
     { "generating",         "generatetoaddress",      &generatetoaddress,      true  },

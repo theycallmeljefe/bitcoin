@@ -87,8 +87,6 @@ BlockAssembler::BlockAssembler(const CChainParams& _chainparams, unsigned int nM
 
 void BlockAssembler::resetBlock()
 {
-    inBlock.clear();
-
     // Reserve space for coinbase tx
     nBlockSize = 1000;
     nBlockWeight = 4000;
@@ -103,7 +101,7 @@ void BlockAssembler::resetBlock()
     blockFinished = false;
 }
 
-std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock(const CScript& scriptPubKeyIn)
+std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock(const CScript& scriptPubKeyIn, bool fCheck)
 {
     resetBlock();
 
@@ -143,7 +141,9 @@ std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock(const CScript& sc
     // transaction (which in most cases can be a no-op).
     fIncludeWitness = IsWitnessEnabled(pindexPrev, chainparams.GetConsensus());
 
-    addPriorityTxs();
+    if (fCheck) {
+        addPriorityTxs();
+    }
     addPackageTxs();
 
     nLastBlockTx = nBlockTx;
@@ -169,10 +169,13 @@ std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock(const CScript& sc
     pblock->nBits          = GetNextWorkRequired(pindexPrev, pblock, chainparams.GetConsensus());
     pblock->nNonce         = 0;
     pblocktemplate->vTxSigOpsCost[0] = WITNESS_SCALE_FACTOR * GetLegacySigOpCount(pblock->vtx[0]);
+    pblocktemplate->nMinPackageFeeRate = nMinPackageFeeRate;
 
-    CValidationState state;
-    if (!TestBlockValidity(state, chainparams, *pblock, pindexPrev, false, false)) {
-        throw std::runtime_error(strprintf("%s: TestBlockValidity failed: %s", __func__, FormatStateMessage(state)));
+    if (fCheck) {
+        CValidationState state;
+        if (!TestBlockValidity(state, chainparams, *pblock, pindexPrev, false, false)) {
+            throw std::runtime_error(strprintf("%s: TestBlockValidity failed: %s", __func__, FormatStateMessage(state)));
+        }
     }
 
     return std::move(pblocktemplate);
@@ -384,6 +387,9 @@ void BlockAssembler::addPackageTxs()
     // Keep track of entries that failed inclusion, to avoid duplicate work
     CTxMemPool::setEntries failedTx;
 
+    bool first = true;
+    bool skipped = false;
+
     // Start by adding all descendants of previously added txs to mapModifiedTx
     // and modifying them for their already included ancestors
     UpdatePackagesForAdded(inBlock, mapModifiedTx);
@@ -451,6 +457,7 @@ void BlockAssembler::addPackageTxs()
                 mapModifiedTx.get<ancestor_score>().erase(modit);
                 failedTx.insert(iter);
             }
+            skipped = true;
             continue;
         }
 
@@ -469,6 +476,12 @@ void BlockAssembler::addPackageTxs()
                 failedTx.insert(iter);
             }
             continue;
+        }
+
+        if (!skipped) {
+            CAmount feerate = (packageFees * 1000) / packageSize;
+            nMinPackageFeeRate = first ? feerate : std::min(nMinPackageFeeRate, feerate);
+            first = false;
         }
 
         // Package can be added. Sort the entries in a valid order.
