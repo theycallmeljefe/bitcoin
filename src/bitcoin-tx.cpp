@@ -625,7 +625,7 @@ static int CommandLineRawTx(int argc, char* argv[])
             argv++;
         }
 
-        CTransaction txDecodeTmp;
+        CTransactionRef txDecodeTmp;
         int startArg;
 
         if (!fCreateBlank) {
@@ -642,10 +642,12 @@ static int CommandLineRawTx(int argc, char* argv[])
                 throw runtime_error("invalid transaction encoding");
 
             startArg = 2;
-        } else
+        } else {
+            txDecodeTmp = MakeTransactionRef();
             startArg = 1;
+        }
 
-        CMutableTransaction tx(txDecodeTmp);
+        CMutableTransaction tx(*txDecodeTmp);
 
         for (int i = startArg; i < argc; i++) {
             string arg = argv[i];

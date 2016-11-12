@@ -7,17 +7,19 @@
 
 #include <string>
 #include <vector>
+#include <memory>
 
 class CBlock;
 class CScript;
 class CTransaction;
+typedef std::shared_ptr<const CTransaction> CTransactionRef;
 class uint256;
 class UniValue;
 
 // core_read.cpp
 extern CScript ParseScript(const std::string& s);
 extern std::string ScriptToAsmStr(const CScript& script, const bool fAttemptSighashDecode = false);
-extern bool DecodeHexTx(CTransaction& tx, const std::string& strHexTx, bool fTryNoWitness = false);
+extern bool DecodeHexTx(CTransactionRef& tx, const std::string& strHexTx, bool fTryNoWitness = false);
 extern bool DecodeHexBlk(CBlock&, const std::string& strHexBlk);
 extern uint256 ParseHashUV(const UniValue& v, const std::string& strName);
 extern uint256 ParseHashStr(const std::string&, const std::string& strName);
