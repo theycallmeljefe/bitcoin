@@ -295,20 +295,19 @@ inline void UnserializeTransaction(TxType& tx, Stream& s) {
     tx.vin.clear();
     tx.vout.clear();
     tx.wit.SetNull();
-    /* Try to read the vin. In case the dummy is there, this will be read as an empty vector. */
-    s >> tx.vin;
-    if (tx.vin.size() == 0 && fAllowWitness) {
-        /* We read a dummy or an empty vin. */
+    bool fEmpty = false;
+    if (fAllowWitness && s.peek() == 0) {
+        unsigned char dummy;
+        s >> dummy;
+        /* We may have read a dummy */
         s >> flags;
-        if (flags != 0) {
-            s >> tx.vin;
-            s >> tx.vout;
-        }
-    } else {
-        /* We read a non-empty vin. Assume a normal vout follows. */
+        fEmpty = flags == 0;
+    }
+    if (!fEmpty) {
+        s >> tx.vin;
         s >> tx.vout;
     }
-    if ((flags & 1) && fAllowWitness) {
+    if (flags & 1) {
         /* The witness flag is present, and we support witnesses. */
         flags ^= 1;
         tx.wit.vtxinwit.resize(tx.vin.size());

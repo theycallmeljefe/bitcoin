@@ -59,6 +59,11 @@ public:
         stream->read(pch, nSize);
     }
 
+    char peek()
+    {
+        return stream->peek();
+    }
+
     int GetVersion() const { return nVersion; }
     int GetType() const { return nType; }
 };
@@ -289,6 +294,14 @@ public:
         nReadPos = nReadPosNext;
     }
 
+    char peek()
+    {
+        if (nReadPos >= vch.size()) {
+            throw std::ios_base::failure("CDataStream::read(): end of data");
+        }
+        return vch[nReadPos];
+    }
+
     void ignore(int nSize)
     {
         // Ignore from the beginning of the buffer
@@ -442,6 +455,16 @@ public:
             throw std::ios_base::failure(feof(file) ? "CAutoFile::read: end of file" : "CAutoFile::read: fread failed");
     }
 
+    char peek()
+    {
+        if (!file)
+            throw std::ios_base::failure("CAutoFile::read: file handle is NULL");
+        int c = getc(file);
+        if (c == EOF || ungetc(c, file) == EOF)
+            throw std::ios_base::failure(feof(file) ? "CAutoFile::peek: end of file" : "CAutoFile::peek: read failed");
+        return c;
+    }
+
     void ignore(size_t nSize)
     {
         if (!file)
@@ -574,6 +597,14 @@ public:
             pch += nNow;
             nSize -= nNow;
         }
+    }
+
+    char peek() {
+        if (nReadPos >= nReadLimit)
+            throw std::ios_base::failure("Read attempted past buffer limit");
+        if (nRewind >= vchBuf.size())
+            throw std::ios_base::failure("Read larger than buffer size");
+        return vchBuf[nReadPos];
     }
 
     // return the current reading position

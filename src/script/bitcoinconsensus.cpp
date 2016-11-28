@@ -39,6 +39,17 @@ public:
         m_data += nSize;
     }
 
+    char peek()
+    {
+        if (m_remaining == 0)
+            throw std::ios_base::failure(std::string(__func__) + ": end of data");
+
+        if (m_data == NULL)
+            throw std::ios_base::failure(std::string(__func__) + ": bad source buffer");
+
+        return *m_data;
+    }
+
     template<typename T>
     TxInputStream& operator>>(T& obj)
     {
