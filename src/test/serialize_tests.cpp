@@ -4,6 +4,7 @@
 
 #include "serialize.h"
 #include "streams.h"
+#include "bitpacker.h"
 #include "hash.h"
 #include "test/test_bitcoin.h"
 
@@ -364,6 +365,49 @@ BOOST_AUTO_TEST_CASE(class_methods)
     CDataStream ss2(SER_DISK, PROTOCOL_VERSION, intval, boolval, stringval, FLATDATA(charstrval), txval);
     ss2 >> methodtest3;
     BOOST_CHECK(methodtest3 == methodtest4);
+}
+
+BOOST_AUTO_TEST_CASE(bitpacker)
+{
+    FastRandomContext ctx;
+    for (int i = 0; i <=1000; i++) {
+        std::vector<bool> exp;
+        for (int j = 0; j < i; j++) {
+            exp.push_back(ctx.rand32() & 1);
+        }
+        CDataStream ss(SER_DISK, CLIENT_VERSION);
+        {
+            BitWriter<CDataStream> writer(&ss);
+            int pos = 0;
+            while (pos < i) {
+                int now = std::min<int>(i - pos, 1 + (ctx.rand32() % 8));
+                int x = now;
+                uint8_t val = 0;
+                while (x) {
+                    val = val * 2 + exp[pos];
+                    x--;
+                    pos++;
+                }
+                writer.writebits(val, now);
+            }
+        }
+        {
+            BitReader<CDataStream> reader(&ss);
+            int pos = 0;
+            while (pos < i) {
+                int now = std::min<int>(i - pos, 1 + (ctx.rand32() % 8));
+                int x = now;
+                uint8_t val = 0;
+                while (x) {
+                    val = val * 2 + exp[pos];
+                    x--;
+                    pos++;
+                }
+                BOOST_CHECK_EQUAL(val, reader.readbits(now));
+            }
+            BOOST_CHECK(ss.eof() && reader.empty());
+        }
+    }
 }
 
 BOOST_AUTO_TEST_SUITE_END()

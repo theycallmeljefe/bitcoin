@@ -78,6 +78,7 @@ BITCOIN_CORE_H = \
   addrdb.h \
   addrman.h \
   base58.h \
+  bitpacker.h \
   bloom.h \
   blockencodings.h \
   chain.h \
