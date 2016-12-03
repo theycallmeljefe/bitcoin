@@ -11,6 +11,12 @@
 #include <stdint.h>
 
 #include <boost/test/unit_test.hpp>
+
+#include "keystore.h"
+#include "txcompressor.h"
+#include "script/standard.h"
+#include "script/sign.h"
+
 using namespace std;
 
 BOOST_FIXTURE_TEST_SUITE(serialize_tests, BasicTestingSetup)
@@ -407,6 +413,59 @@ BOOST_AUTO_TEST_CASE(bitpacker)
             }
             BOOST_CHECK(ss.eof() && reader.empty());
         }
+    }
+}
+
+BOOST_AUTO_TEST_CASE(txcompressor)
+{
+    static const unsigned char vchKey[32] = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,0,0,0,0,0,0,0,1,0,0};
+    CKey key;
+    key.Set(vchKey, vchKey + 32, true);
+    CPubKey pubkey = key.GetPubKey();
+    CBasicKeyStore keystore;
+    keystore.AddKey(key);
+    CScript outscript1 = GetScriptForDestination(pubkey.GetID());
+    CScript outscript2 = GetScriptForDestination(CKeyID(uint160(std::vector<unsigned char>{0xbb,0xbb,0xbb,0xbb,0xbb,0xbb,0xbb,0xbb,0xbb,0xbb,0xbb,0xbb,0xbb,0xbb,0xbb,0xbb,0xbb,0xbb,0xbb,0xbb})));
+
+    CMutableTransaction outputm;
+    outputm.nVersion = 1;
+    outputm.vin.resize(1);
+    outputm.vin[0].prevout.SetNull();
+    outputm.vin[0].scriptSig = CScript() << OP_1 << OP_2 << OP_3;
+    outputm.vout.resize(2);
+    outputm.vout[0].nValue = 1000;
+    outputm.vout[0].scriptPubKey = outscript1;
+    outputm.vout[1].nValue = 1000000;
+    outputm.vout[1].scriptPubKey = outscript1;
+    CTransaction output(std::move(outputm));
+
+    CMutableTransaction inputm;
+    inputm.nVersion = 1;
+    inputm.vin.resize(2);
+    inputm.vin[0].prevout.hash = uint256S("0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc");
+    inputm.vin[0].prevout.n = 0;
+    inputm.vin[1].prevout.hash = uint256S("0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc");
+    inputm.vin[1].prevout.n = 1;
+    inputm.vout.resize(2);
+    inputm.vout[0].nValue = 1;
+    inputm.vout[0].scriptPubKey = outscript2;
+    inputm.vout[1].nValue = 1;
+    inputm.vout[1].scriptPubKey = outscript2;
+    bool ret = SignSignature(keystore, output, inputm, 0, SIGHASH_ALL);
+    BOOST_CHECK(ret);
+    ret = SignSignature(keystore, output, inputm, 1, SIGHASH_ALL);
+    BOOST_CHECK(ret);
+
+    CTransaction input(std::move(inputm));
+    {
+        CDataStream ss(SER_DISK, 0);
+        ss << REF(TxCompressor(&output));
+//        fprintf(stderr, "Compressed coinbase from %i: %s\n", (int)GetSerializeSize(output, SER_DISK, CLIENT_VERSION), HexStr(ss.begin(), ss.end()).c_str());
+    }
+    {
+        CDataStream ss(SER_DISK, 0);
+        ss << REF(TxCompressor(&input));
+//        fprintf(stderr, "Compressed spend from %i: %s\n", (int)GetSerializeSize(input, SER_DISK, CLIENT_VERSION), HexStr(ss.begin(), ss.end()).c_str());
     }
 }
 
