@@ -25,6 +25,7 @@
 #include "script/standard.h"
 #include "timedata.h"
 #include "tinyformat.h"
+#include "txcompressor.h"
 #include "txdb.h"
 #include "txmempool.h"
 #include "ui_interface.h"
@@ -1709,7 +1710,7 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
         return true;
     }
 
-    bool fScriptChecks = true;
+    bool fScriptChecks = false;
     if (fCheckpointsEnabled) {
         CBlockIndex *pindexLastCheckpoint = Checkpoints::GetLastCheckpoint(chainparams.Checkpoints());
         if (pindexLastCheckpoint && pindexLastCheckpoint->GetAncestor(pindex->nHeight) == pindex) {
@@ -3767,6 +3768,15 @@ bool LoadExternalBlockFile(const CChainParams& chainparams, FILE* fileIn, CDiskB
                 CBlock block;
                 blkdat >> block;
                 nRewind = blkdat.GetPos();
+
+                {
+                    size_t csize = ::GetSerializeSize(VARINT(block.vtx.size()), SER_DISK, CLIENT_VERSION);
+                    size_t nsize = 80 + ::GetSerializeSize(block, SER_DISK, CLIENT_VERSION);
+                    for (const auto& tx : block.vtx) {
+                        csize += ::GetSerializeSize(TxCompressor(&*tx), SER_DISK, CLIENT_VERSION);
+                    }
+                    LogPrintf("Compress block %s: %i %i\n", block.GetHash().ToString(), nsize, csize);
+                }
 
                 // detect out of order blocks, and store them for later
                 uint256 hash = block.GetHash();
