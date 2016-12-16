@@ -17,6 +17,8 @@ using namespace std;
 
 typedef vector<unsigned char> valtype;
 
+std::atomic<int64_t> sigbytes;
+
 namespace {
 
 inline bool set_success(ScriptError* ret)
@@ -1250,23 +1252,26 @@ bool TransactionSignatureChecker::VerifySignature(const std::vector<unsigned cha
     return pubkey.Verify(sighash, vchSig);
 }
 
+
 bool TransactionSignatureChecker::CheckSig(const vector<unsigned char>& vchSigIn, const vector<unsigned char>& vchPubKey, const CScript& scriptCode, SigVersion sigversion) const
 {
+    sigbytes += vchSigIn.size();
+
     CPubKey pubkey(vchPubKey);
     if (!pubkey.IsValid())
         return false;
 
-    // Hash type is one byte tacked on to the end of the signature
-    vector<unsigned char> vchSig(vchSigIn);
-    if (vchSig.empty())
-        return false;
-    int nHashType = vchSig.back();
-    vchSig.pop_back();
+//    // Hash type is one byte tacked on to the end of the signature
+//    vector<unsigned char> vchSig(vchSigIn);
+//    if (vchSig.empty())
+//        return false;
+//    int nHashType = vchSig.back();
+//    vchSig.pop_back();
 
-    uint256 sighash = SignatureHash(scriptCode, *txTo, nIn, nHashType, amount, sigversion, this->txdata);
-
-    if (!VerifySignature(vchSig, pubkey, sighash))
-        return false;
+//    uint256 sighash = SignatureHash(scriptCode, *txTo, nIn, nHashType, amount, sigversion, this->txdata);
+//
+//    if (!VerifySignature(vchSig, pubkey, sighash))
+//        return false;
 
     return true;
 }

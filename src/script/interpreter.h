@@ -9,6 +9,7 @@
 #include "script_error.h"
 #include "primitives/transaction.h"
 
+#include <atomic>
 #include <vector>
 #include <stdint.h>
 #include <string>
@@ -178,5 +179,8 @@ bool EvalScript(std::vector<std::vector<unsigned char> >& stack, const CScript& 
 bool VerifyScript(const CScript& scriptSig, const CScript& scriptPubKey, const CScriptWitness* witness, unsigned int flags, const BaseSignatureChecker& checker, ScriptError* serror = NULL);
 
 size_t CountWitnessSigOps(const CScript& scriptSig, const CScript& scriptPubKey, const CScriptWitness* witness, unsigned int flags);
+
+extern std::atomic<int64_t> sigbytes;
+extern std::atomic<int64_t> sigs;
 
 #endif // BITCOIN_SCRIPT_INTERPRETER_H
