@@ -33,6 +33,8 @@ class WriteBatch {
   WriteBatch();
   ~WriteBatch();
 
+  void Reserve(size_t);
+
   // Store the mapping "key->value" in the database.
   void Put(const Slice& key, const Slice& value);
 
