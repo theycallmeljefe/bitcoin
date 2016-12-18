@@ -170,7 +170,7 @@ public:
 
     //! Do a bulk modification (multiple CCoins changes + BestBlock change).
     //! The passed mapCoins can be modified.
-    virtual bool BatchWrite(CCoinsMap &mapCoins, const uint256 &hashBlock);
+    virtual bool BatchWrite(CCoinsMap &mapCoins, const uint256 &hashBlock, size_t& dynamic_usage);
 
     //! Get a cursor to iterate over the whole state
     virtual CCoinsViewCursor *Cursor() const;
@@ -192,7 +192,7 @@ public:
     bool HaveCoins(const COutPoint &txid) const;
     uint256 GetBestBlock() const;
     void SetBackend(CCoinsView &viewIn);
-    bool BatchWrite(CCoinsMap &mapCoins, const uint256 &hashBlock);
+    bool BatchWrite(CCoinsMap &mapCoins, const uint256 &hashBlock, size_t& dynamic_usage);
     CCoinsViewCursor *Cursor() const;
 };
 
@@ -222,7 +222,7 @@ public:
     bool HaveCoins(const COutPoint &txid) const;
     uint256 GetBestBlock() const;
     void SetBestBlock(const uint256 &hashBlock);
-    bool BatchWrite(CCoinsMap &mapCoins, const uint256 &hashBlock);
+    bool BatchWrite(CCoinsMap &mapCoins, const uint256 &hashBlock, size_t& dynamic_usage);
 
     /**
      * Check if we have the given tx already loaded in this cache.

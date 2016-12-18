@@ -69,7 +69,7 @@ uint256 CCoinsViewDB::GetBestBlock() const {
     return hashBestChain;
 }
 
-bool CCoinsViewDB::BatchWrite(CCoinsMap &mapCoins, const uint256 &hashBlock) {
+bool CCoinsViewDB::BatchWrite(CCoinsMap &mapCoins, const uint256 &hashBlock, size_t& dynamic_usage) {
     CDBBatch batch(db);
     size_t count = 0;
     size_t changed = 0;
@@ -88,6 +88,7 @@ bool CCoinsViewDB::BatchWrite(CCoinsMap &mapCoins, const uint256 &hashBlock) {
     }
     if (!hashBlock.IsNull())
         batch.Write(DB_BEST_BLOCK, hashBlock);
+    dynamic_usage = 0;
 
     LogPrint("coindb", "Committing %u/%u transaction outputs to coin database...\n", changed, count);
     return db.WriteBatch(batch);

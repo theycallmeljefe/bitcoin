@@ -12,7 +12,7 @@
 bool CCoinsView::GetCoins(const COutPoint &txid, CCoins &coins) const { return false; }
 bool CCoinsView::HaveCoins(const COutPoint &txid) const { return false; }
 uint256 CCoinsView::GetBestBlock() const { return uint256(); }
-bool CCoinsView::BatchWrite(CCoinsMap &mapCoins, const uint256 &hashBlock) { return false; }
+bool CCoinsView::BatchWrite(CCoinsMap &mapCoins, const uint256 &hashBlock, size_t& dynamic_usage) { return false; }
 CCoinsViewCursor *CCoinsView::Cursor() const { return 0; }
 
 
@@ -21,7 +21,7 @@ bool CCoinsViewBacked::GetCoins(const COutPoint &txid, CCoins &coins) const { re
 bool CCoinsViewBacked::HaveCoins(const COutPoint &txid) const { return base->HaveCoins(txid); }
 uint256 CCoinsViewBacked::GetBestBlock() const { return base->GetBestBlock(); }
 void CCoinsViewBacked::SetBackend(CCoinsView &viewIn) { base = &viewIn; }
-bool CCoinsViewBacked::BatchWrite(CCoinsMap &mapCoins, const uint256 &hashBlock) { return base->BatchWrite(mapCoins, hashBlock); }
+bool CCoinsViewBacked::BatchWrite(CCoinsMap &mapCoins, const uint256 &hashBlock, size_t& dynamic_usage) { return base->BatchWrite(mapCoins, hashBlock, dynamic_usage); }
 CCoinsViewCursor *CCoinsViewBacked::Cursor() const { return base->Cursor(); }
 
 SaltedOutpointHasher::SaltedOutpointHasher() : k0(GetRand(std::numeric_limits<uint64_t>::max())), k1(GetRand(std::numeric_limits<uint64_t>::max())) {}
@@ -122,7 +122,7 @@ void CCoinsViewCache::SetBestBlock(const uint256 &hashBlockIn) {
     hashBlock = hashBlockIn;
 }
 
-bool CCoinsViewCache::BatchWrite(CCoinsMap &mapCoins, const uint256 &hashBlockIn) {
+bool CCoinsViewCache::BatchWrite(CCoinsMap &mapCoins, const uint256 &hashBlockIn, size_t& dynamic_usage) {
     for (CCoinsMap::iterator it = mapCoins.begin(); it != mapCoins.end();) {
         if (it->second.flags & CCoinsCacheEntry::DIRTY) { // Ignore non-dirty entries (optimization).
             CCoinsMap::iterator itUs = cacheCoins.find(it->first);
@@ -164,15 +164,13 @@ bool CCoinsViewCache::BatchWrite(CCoinsMap &mapCoins, const uint256 &hashBlockIn
         CCoinsMap::iterator itOld = it++;
         mapCoins.erase(itOld);
     }
+    dynamic_usage = 0;
     hashBlock = hashBlockIn;
     return true;
 }
 
 bool CCoinsViewCache::Flush() {
-    bool fOk = base->BatchWrite(cacheCoins, hashBlock);
-    cacheCoins.clear();
-    cachedCoinsUsage = 0;
-    return fOk;
+    return base->BatchWrite(cacheCoins, hashBlock, cachedCoinsUsage);
 }
 
 void CCoinsViewCache::Uncache(const COutPoint& hash)
