@@ -170,7 +170,7 @@ public:
 
     //! Do a bulk modification (multiple CCoins changes + BestBlock change).
     //! The passed mapCoins can be modified.
-    virtual bool BatchWrite(CCoinsMap &mapCoins, const uint256 &hashBlock, size_t& dynamic_usage);
+    virtual bool BatchWrite(CCoinsMap &mapCoins, const uint256 &hashBlock, size_t& dynamic_usage, int nHeight);
 
     //! Get a cursor to iterate over the whole state
     virtual CCoinsViewCursor *Cursor() const;
@@ -192,7 +192,7 @@ public:
     bool HaveCoins(const COutPoint &txid) const;
     uint256 GetBestBlock() const;
     void SetBackend(CCoinsView &viewIn);
-    bool BatchWrite(CCoinsMap &mapCoins, const uint256 &hashBlock, size_t& dynamic_usage);
+    bool BatchWrite(CCoinsMap &mapCoins, const uint256 &hashBlock, size_t& dynamic_usage, int nHeight);
     CCoinsViewCursor *Cursor() const;
 };
 
@@ -208,6 +208,7 @@ protected:
      * declared as "const".  
      */
     mutable uint256 hashBlock;
+    mutable int nHeight = 0;
     mutable CCoinsMap cacheCoins;
 
     /* Cached dynamic memory usage for the inner CCoins objects. */
@@ -221,8 +222,8 @@ public:
     bool GetCoins(const COutPoint &txid, CCoins &coins) const;
     bool HaveCoins(const COutPoint &txid) const;
     uint256 GetBestBlock() const;
-    void SetBestBlock(const uint256 &hashBlock);
-    bool BatchWrite(CCoinsMap &mapCoins, const uint256 &hashBlock, size_t& dynamic_usage);
+    void SetBestBlock(const uint256 &hashBlock, int nHeight);
+    bool BatchWrite(CCoinsMap &mapCoins, const uint256 &hashBlock, size_t& dynamic_usage, int nHeight);
 
     /**
      * Check if we have the given tx already loaded in this cache.

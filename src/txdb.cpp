@@ -69,7 +69,7 @@ uint256 CCoinsViewDB::GetBestBlock() const {
     return hashBestChain;
 }
 
-bool CCoinsViewDB::BatchWrite(CCoinsMap &mapCoins, const uint256 &hashBlock, size_t& dynamic_usage) {
+bool CCoinsViewDB::BatchWrite(CCoinsMap &mapCoins, const uint256 &hashBlock, size_t& dynamic_usage, int nHeight) {
     CDBBatch batch(db);
     size_t count = 0;
     size_t changed = 0;
