@@ -120,6 +120,7 @@ struct CCoinsCacheEntry
     enum Flags {
         DIRTY = (1 << 0), // This cache entry is potentially different from the version in the parent view.
         FRESH = (1 << 1), // The parent view does not have this entry (or it is pruned).
+        PRESERVED = (1 << 2),
     };
 
     CCoinsCacheEntry() : flags(0) {}

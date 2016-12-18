@@ -66,6 +66,9 @@ class CCoinsViewDB : public CCoinsView
 {
 protected:
     CDBWrapper db;
+    int nLastHeight = 0;
+    bool have_preserved = false;
+
 public:
     CCoinsViewDB(size_t nCacheSize, bool fMemory = false, bool fWipe = false);
 

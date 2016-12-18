@@ -70,9 +70,26 @@ uint256 CCoinsViewDB::GetBestBlock() const {
 }
 
 bool CCoinsViewDB::BatchWrite(CCoinsMap &mapCoins, const uint256 &hashBlock, size_t& dynamic_usage, int nHeight) {
+    if (have_preserved) {
+        size_t purged = 0;
+        for (CCoinsMap::iterator it = mapCoins.begin(); it != mapCoins.end();) {
+            CCoinsMap::iterator itOld = it++;
+            if ((itOld->second.flags & (CCoinsCacheEntry::DIRTY | CCoinsCacheEntry::PRESERVED)) == CCoinsCacheEntry::PRESERVED) {
+                dynamic_usage -= itOld->second.coins.DynamicMemoryUsage();
+                mapCoins.erase(itOld);
+                ++purged;
+            }
+        }
+        LogPrint("coindb", "Purged %u preserved txouts from cache\n", purged);
+        have_preserved = false;
+        return true;
+    }
+
     CDBBatch batch(db);
     size_t count = 0;
     size_t changed = 0;
+    size_t kept = 0;
+    int purgeheight = (nHeight + nLastHeight + 1)/2;
     for (CCoinsMap::iterator it = mapCoins.begin(); it != mapCoins.end();) {
         if (it->second.flags & CCoinsCacheEntry::DIRTY) {
             CoinsEntry entry(&it->first);
@@ -84,13 +101,19 @@ bool CCoinsViewDB::BatchWrite(CCoinsMap &mapCoins, const uint256 &hashBlock, siz
         }
         count++;
         CCoinsMap::iterator itOld = it++;
-        mapCoins.erase(itOld);
+        if (itOld->second.coins.IsPruned() || itOld->second.coins.nHeight < (uint32_t)purgeheight) {
+            dynamic_usage -= itOld->second.coins.DynamicMemoryUsage();
+            mapCoins.erase(itOld);
+        } else {
+            ++kept;
+            itOld->second.flags = CCoinsCacheEntry::PRESERVED;
+        }
     }
     if (!hashBlock.IsNull())
         batch.Write(DB_BEST_BLOCK, hashBlock);
-    dynamic_usage = 0;
-
-    LogPrint("coindb", "Committing %u/%u transaction outputs to coin database...\n", changed, count);
+    nLastHeight = purgeheight;
+    have_preserved = kept > 0;
+    LogPrint("coindb", "Committing %u/%u txouts to coin database, keeping %u (after height %i)\n", changed, count, kept, nLastHeight);
     return db.WriteBatch(batch);
 }
 
