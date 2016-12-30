@@ -786,6 +786,9 @@ static bool GetUTXOStats(CCoinsView *view, CCoinsStats &stats)
     }
     ss << stats.hashBlock;
     CAmount nTotalAmount = 0;
+    size_t nCoinbaseTx = 0;
+    size_t nCoinbaseTxOut = 0;
+    CAmount nCoinbaseAmount = 0;
     while (pcursor->Valid()) {
         boost::this_thread::interruption_point();
         uint256 key;
@@ -793,6 +796,9 @@ static bool GetUTXOStats(CCoinsView *view, CCoinsStats &stats)
         if (pcursor->GetKey(key) && pcursor->GetValue(coins)) {
             stats.nTransactions++;
             ss << key;
+            if (coins.IsCoinBase()) {
+                ++nCoinbaseTx;
+            }
             for (unsigned int i=0; i<coins.vout.size(); i++) {
                 const CTxOut &out = coins.vout[i];
                 if (!out.IsNull()) {
@@ -800,6 +806,10 @@ static bool GetUTXOStats(CCoinsView *view, CCoinsStats &stats)
                     ss << VARINT(i+1);
                     ss << out;
                     nTotalAmount += out.nValue;
+                    if (coins.IsCoinBase()) {
+                        ++nCoinbaseTxOut;
+                        nCoinbaseAmount += out.nValue;
+                    }
                 }
             }
             stats.nSerializedSize += 32 + pcursor->GetValueSize();
@@ -811,6 +821,7 @@ static bool GetUTXOStats(CCoinsView *view, CCoinsStats &stats)
     }
     stats.hashSerialized = ss.GetHash();
     stats.nTotalAmount = nTotalAmount;
+    LogPrintf("Coinbases: %lu outputs: %lu amount: %lu\n", nCoinbaseTx, nCoinbaseTxOut, nCoinbaseAmount);
     return true;
 }
 
