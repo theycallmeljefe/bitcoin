@@ -4,6 +4,8 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include "validationinterface.h"
+#include "init.h"
+#include "scheduler.h"
 
 #include <boost/signals2/signal.hpp>
 
@@ -18,6 +20,8 @@ struct CMainSignalsInstance {
     boost::signals2::signal<void (const CBlock&, const CValidationState&)> BlockChecked;
     boost::signals2::signal<void (std::shared_ptr<CReserveScript>&)> ScriptForMining;
     boost::signals2::signal<void (const CBlockIndex *, const std::shared_ptr<const CBlock>&)> NewPoWValidBlock;
+
+    CScheduler *scheduler = NULL;
 };
 
 static CMainSignals g_signals;
@@ -28,6 +32,15 @@ CMainSignals::CMainSignals() {
 
 CMainSignals::~CMainSignals() {
     delete internals;
+}
+
+void CMainSignals::RegisterBackgroundSignalScheduler(CScheduler& scheduler) {
+    assert(!internals->scheduler);
+    internals->scheduler = &scheduler;
+}
+
+void CMainSignals::UnregisterBackgroundSignalScheduler() {
+    internals->scheduler = NULL;
 }
 
 CMainSignals& GetMainSignals()
