@@ -43,6 +43,9 @@ public:
     // Call func at/after time t
     void schedule(Function f, boost::chrono::system_clock::time_point t);
 
+    // Call func as soon as a background thread is free
+    void schedule(Function f);
+
     // Convenience method: call f once deltaSeconds from now
     void scheduleFromNow(Function f, int64_t deltaMilliSeconds);
 
