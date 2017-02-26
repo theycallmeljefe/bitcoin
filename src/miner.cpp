@@ -128,7 +128,10 @@ BlockAssembler::BlockAssembler(const CChainParams& params) : BlockAssembler(para
 void BlockAssembler::resetBlock()
 {
     inBlock.clear();
+}
 
+std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock(const CScript& scriptPubKeyIn)
+{
     // Reserve space for coinbase tx
     nBlockSize = 1000;
     nBlockWeight = 4000;
@@ -141,11 +144,6 @@ void BlockAssembler::resetBlock()
 
     lastFewTxs = 0;
     blockFinished = false;
-}
-
-std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock(const CScript& scriptPubKeyIn)
-{
-    resetBlock();
 
     pblocktemplate.reset(new CBlockTemplate());
 

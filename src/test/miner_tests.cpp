@@ -27,10 +27,10 @@ BOOST_FIXTURE_TEST_SUITE(miner_tests, TestingSetup)
 
 static CFeeRate blockMinFeeRate = CFeeRate(DEFAULT_BLOCK_MIN_TX_FEE);
 
-static BlockAssembler AssemblerForTest(const CChainParams& params) {
+static BlockAssembler AssemblerForTest(const CChainParams& params, bool fTest = true) {
     BlockAssembler::Options options;
 
-    options.fTestBlockValidity = true;
+    options.fTestBlockValidity = fTest;
     options.nBlockMaxWeight = MAX_BLOCK_WEIGHT;
     options.nBlockMaxSize = MAX_BLOCK_SERIALIZED_SIZE;
     options.blockMinFeeRate = blockMinFeeRate;
@@ -302,6 +302,29 @@ BOOST_AUTO_TEST_CASE(CreateNewBlock_validity)
         tx.vin[0].prevout.hash = hash;
     }
     BOOST_CHECK(pblocktemplate = AssemblerForTest(chainparams).CreateNewBlock(scriptPubKey));
+
+    {
+        BlockAssembler assembler = AssemblerForTest(chainparams, false);
+
+        std::unique_ptr<CBlockTemplate> pblocktemplate1, pblocktemplate2, pblocktemplate3;
+        BOOST_CHECK(pblocktemplate1 = assembler.CreateNewBlock(scriptPubKey));
+        BOOST_CHECK(pblocktemplate2 = assembler.CreateNewBlock(scriptPubKey));
+        BOOST_CHECK(pblocktemplate3 = assembler.CreateNewBlock(scriptPubKey));
+
+        BOOST_CHECK(pblocktemplate2->block.vtx.size() > 1);
+
+        std::set<uint256> txid_first;
+        for (const auto& tx : pblocktemplate->block.vtx) {
+            txid_first.insert(tx->GetHash());
+        }
+        for (const auto& tx : pblocktemplate2->block.vtx) {
+            // Test that the second block's transactions don't overlap with the first.
+            BOOST_CHECK_EQUAL(txid_first.count(tx->GetHash()), 0);
+        }
+
+        // Verify the third block is empty.
+        BOOST_CHECK_EQUAL(pblocktemplate3->block.vtx.size(), 1);
+    }
     mempool.clear();
 
     // orphan in mempool, template creation fails
