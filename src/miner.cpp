@@ -76,6 +76,7 @@ BlockAssembler::Options::Options() {
     blockMinFeeRate = CFeeRate(DEFAULT_BLOCK_MIN_TX_FEE);
     nBlockMaxWeight = DEFAULT_BLOCK_MAX_WEIGHT;
     nBlockMaxSize = DEFAULT_BLOCK_MAX_SIZE;
+    fTestBlockValidity = DEFAULT_TEST_CNBVALID;
 }
 
 BlockAssembler::BlockAssembler(const CChainParams& params, const Options& options) : chainparams(params)
@@ -87,6 +88,7 @@ BlockAssembler::BlockAssembler(const CChainParams& params, const Options& option
     nBlockMaxSize = std::max<size_t>(1000, std::min<size_t>(MAX_BLOCK_SERIALIZED_SIZE - 1000, options.nBlockMaxSize));
     // Whether we need to account for byte usage (in addition to weight usage)
     fNeedSizeAccounting = (nBlockMaxSize < MAX_BLOCK_SERIALIZED_SIZE - 1000);
+    fTestBlockValidity = options.fTestBlockValidity;
 }
 
 static BlockAssembler::Options DefaultOptions(const CChainParams& params)
@@ -98,6 +100,7 @@ static BlockAssembler::Options DefaultOptions(const CChainParams& params)
     BlockAssembler::Options options;
     options.nBlockMaxWeight = DEFAULT_BLOCK_MAX_WEIGHT;
     options.nBlockMaxSize = DEFAULT_BLOCK_MAX_SIZE;
+    options.fTestBlockValidity = fRunTestBlockValidity;
     bool fWeightSet = false;
     if (IsArgSet("-blockmaxweight")) {
         options.nBlockMaxWeight = GetArg("-blockmaxweight", DEFAULT_BLOCK_MAX_WEIGHT);
@@ -209,7 +212,7 @@ std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock(const CScript& sc
     pblock->nNonce         = 0;
     pblocktemplate->vTxSigOpsCost[0] = WITNESS_SCALE_FACTOR * GetLegacySigOpCount(*pblock->vtx[0]);
 
-    if (fRunTestBlockValidity) {
+    if (fTestBlockValidity) {
         CValidationState state;
         if (!TestBlockValidity(state, chainparams, *pblock, pindexPrev, false, false)) {
             throw std::runtime_error(strprintf("%s: TestBlockValidity failed: %s", __func__, FormatStateMessage(state)));

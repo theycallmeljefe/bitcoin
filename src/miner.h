@@ -144,6 +144,7 @@ private:
     unsigned int nBlockMaxWeight, nBlockMaxSize;
     bool fNeedSizeAccounting;
     CFeeRate blockMinFeeRate;
+    bool fTestBlockValidity;
 
     // Information on the current status of the block
     uint64_t nBlockWeight;
@@ -168,6 +169,7 @@ public:
         size_t nBlockMaxWeight;
         size_t nBlockMaxSize;
         CFeeRate blockMinFeeRate;
+        bool fTestBlockValidity;
     };
 
     BlockAssembler(const CChainParams& params);
