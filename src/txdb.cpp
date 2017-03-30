@@ -3,6 +3,9 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+#include <sys/time.h>
+#include <sys/resource.h>
+
 #include "txdb.h"
 
 #include "chainparams.h"
@@ -48,6 +51,9 @@ bool CCoinsViewDB::BatchWrite(CCoinsMap &mapCoins, const uint256 &hashBlock) {
     CDBBatch batch(db);
     size_t count = 0;
     size_t changed = 0;
+    struct rusage usage;
+    getrusage(RUSAGE_SELF, &usage);
+    long pre_mem = usage.ru_maxrss;
     for (CCoinsMap::iterator it = mapCoins.begin(); it != mapCoins.end();) {
         if (it->second.flags & CCoinsCacheEntry::DIRTY) {
             if (it->second.coins.IsPruned())
@@ -64,7 +70,13 @@ bool CCoinsViewDB::BatchWrite(CCoinsMap &mapCoins, const uint256 &hashBlock) {
         batch.Write(DB_BEST_BLOCK, hashBlock);
 
     LogPrint("coindb", "Committing %u changed transactions (out of %u) to coin database...\n", (unsigned int)changed, (unsigned int)count);
-    return db.WriteBatch(batch);
+    getrusage(RUSAGE_SELF, &usage);
+    long mid_mem = usage.ru_maxrss;
+    bool ret = db.WriteBatch(batch);
+    getrusage(RUSAGE_SELF, &usage);
+    long post_mem = usage.ru_maxrss;
+    LogPrintf("Flush time memory: %i -> %i -> %i\n", pre_mem, mid_mem, post_mem);
+    return ret;
 }
 
 CBlockTreeDB::CBlockTreeDB(size_t nCacheSize, bool fMemory, bool fWipe) : CDBWrapper(GetDataDir() / "blocks" / "index", nCacheSize, fMemory, fWipe) {
