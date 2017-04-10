@@ -6,6 +6,11 @@
 #include "validationinterface.h"
 #include "init.h"
 #include "scheduler.h"
+#include "sync.h"
+#include "util.h"
+
+#include <list>
+#include <atomic>
 
 #include <boost/signals2/signal.hpp>
 
@@ -22,6 +27,53 @@ struct CMainSignalsInstance {
     boost::signals2::signal<void (const CBlockIndex *, const std::shared_ptr<const CBlock>&)> NewPoWValidBlock;
 
     CScheduler *scheduler = NULL;
+
+    // We are not allowed to assume the scheduler only runs in one thread,
+    // but must ensure all callbacks happen in-order, so we end up creating
+    // our own queue here :(
+    CCriticalSection cs_callbacksPending;
+    std::list<std::function<void (void)>> callbacksPending;
+    std::atomic<bool> fCallbacksRunning = ATOMIC_VAR_INIT(false);
+
+    void ProcessQueue() {
+        if (fCallbacksRunning.exchange(true)) {
+            return;
+        }
+
+        while (true) {
+            std::function<void (void)> callback;
+            {
+                LOCK(cs_callbacksPending);
+                if (callbacksPending.empty()) {
+                    // We must set fCallbacksRunning to false with
+                    // cs_callbacksRunning held - ensuring that there is no
+                    // race condition in which we might add something to the
+                    // queue, have the associated ProcessQueue call fail to get
+                    // the fCallbacksRunning lock, but have already given up on
+                    // doing more work in the previous ProcessQueue function.
+                    fCallbacksRunning = false;
+                    break;
+                }
+                callback = callbacksPending.front();
+                callbacksPending.pop_front();
+            }
+            try {
+                callback();
+            } catch (...) {
+                LogPrintf("Exception thrown in processing CValidationInterface callback\n");
+            }
+        }
+    }
+
+    void AddToProcessQueue(const std::function<void (void)>& func) {
+        if (!scheduler)
+            return;
+        {
+            LOCK(cs_callbacksPending);
+            callbacksPending.emplace_back(func);
+        }
+        scheduler->schedule(std::bind(&CMainSignalsInstance::ProcessQueue, this));
+    }
 };
 
 static CMainSignals g_signals;
