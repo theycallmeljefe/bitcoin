@@ -1522,8 +1522,6 @@ bool ApplyTxInUndo(const CTxInUndo& undo, CCoinsViewCache& view, const COutPoint
 
 bool DisconnectBlock(const CBlock& block, CValidationState& state, const CBlockIndex* pindex, CCoinsViewCache& view, bool* pfClean)
 {
-    assert(pindex->GetBlockHash() == view.GetBestBlock());
-
     if (pfClean)
         *pfClean = false;
 
@@ -2123,6 +2121,7 @@ bool static DisconnectTip(CValidationState& state, const CChainParams& chainpara
     int64_t nStart = GetTimeMicros();
     {
         CCoinsViewCache view(pcoinsTip);
+        assert(view.GetBestBlock() == pindexDelete->GetBlockHash());
         if (!DisconnectBlock(block, state, pindexDelete, view))
             return error("DisconnectTip(): DisconnectBlock %s failed", pindexDelete->GetBlockHash().ToString());
         bool flushed = view.Flush();
@@ -3655,6 +3654,7 @@ bool CVerifyDB::VerifyDB(const CChainParams& chainparams, CCoinsView *coinsview,
         // check level 3: check for inconsistencies during memory-only disconnect of tip blocks
         if (nCheckLevel >= 3 && pindex == pindexState && (coins.DynamicMemoryUsage() + pcoinsTip->DynamicMemoryUsage()) <= nCoinCacheUsage) {
             bool fClean = true;
+            assert(coins.GetBestBlock() == pindex->GetBlockHash());
             if (!DisconnectBlock(block, state, pindex, coins, &fClean))
                 return error("VerifyDB(): *** irrecoverable inconsistency in block data at %d, hash=%s", pindex->nHeight, pindex->GetBlockHash().ToString());
             pindexState = pindex->pprev;
@@ -3712,42 +3712,6 @@ static bool RollforwardBlock(const CBlockIndex* pindex, CCoinsViewCache& inputs,
     return true;
 }
 
-/** Unapply the effects of a block on the utxo cache, ignoring that it may already have been applied. */
-static bool RollbackBlock(const CBlockIndex* pindex, CCoinsViewCache& inputs, const CChainParams& params)
-{
-    // TODO: Merge with DisconnectBlock
-    CBlock block;
-    if (!ReadBlockFromDisk(block, pindex, params.GetConsensus())) {
-        return error("RollbackBlock(): ReadBlockFromDisk failed at %d, hash=%s", pindex->nHeight, pindex->GetBlockHash().ToString());
-    }
-
-    CBlockUndo blockUndo;
-    CDiskBlockPos pos = pindex->GetUndoPos();
-    if (pos.IsNull())
-        return error("RollbackBlock(): no undo data available");
-    if (!UndoReadFromDisk(blockUndo, pos, pindex->pprev->GetBlockHash()))
-        return error("RollbackBlock(): failure reading undo data");
-
-    if (blockUndo.vtxundo.size() + 1 != block.vtx.size())
-        return error("RollbackBlock(): block and undo data inconsistent");
-
-    for (int i = block.vtx.size() - 1; i >= 0; --i) {
-        const CTransaction& tx = *block.vtx[i];
-        inputs.ModifyCoins(tx.GetHash())->Clear();
-        if (i != 0) {
-            CTxUndo &txundo = blockUndo.vtxundo[i - 1];
-            if (txundo.vprevout.size() != tx.vin.size()) {
-                return error("RollbackBlock(): block and undo data inconsistent");
-            }
-            for (size_t n = 0; n < txundo.vprevout.size(); ++n) {
-                ApplyTxInUndo(txundo.vprevout[n], inputs, COutPoint(tx.GetHash(), n)); // Ignore return value
-            }
-        }
-    }
-    return true;
-}
-
-
 bool ReplayBlocks(const CChainParams& params, CCoinsView* view)
 {
     LOCK(cs_main);
@@ -3792,8 +3756,15 @@ bool ReplayBlocks(const CChainParams& params, CCoinsView* view)
 
     // Rollback all of those in order of decreasing work, deduplicated.
     for (auto itRollback = vpindexRollback.rbegin(); itRollback != vpindexRollback.rend(); ++itRollback) {
-        LogPrintf("Rolling backing %s (%i)\n", (*itRollback)->GetBlockHash().ToString(), (*itRollback)->nHeight);
-        if (!RollbackBlock(*itRollback, cache, params)) return false;
+        const CBlockIndex *pindex = *itRollback;
+        CBlock block;
+        if (!ReadBlockFromDisk(block, pindex, params.GetConsensus())) {
+            return error("RollbackBlock(): ReplayBlocks failed at %d, hash=%s", pindex->nHeight, pindex->GetBlockHash().ToString());
+        }
+        LogPrintf("Rolling back %s (%i)\n", pindex->GetBlockHash().ToString(), pindex->nHeight);
+        bool fClean = true; // Ignoring resulting state of fClean.
+        CValidationState state;
+        if (!DisconnectBlock(block, state, *itRollback, cache, &fClean)) return false;
     }
 
     // Roll forward from the forking point to the new tip.
