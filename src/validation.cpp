@@ -3719,7 +3719,7 @@ bool ReplayBlocks(const CChainParams& params, CCoinsView* view)
     CCoinsViewCache cache(view);
 
     uint256 hashBest = view->GetBestBlock();
-    if (!hashBest.IsNull()) return true;
+    if (!hashBest.IsNull()) return true; // When BestBlock is set, the db state is consistent already.
     std::vector<uint256> hashHeads = view->GetHeadBlocks();
     if (hashHeads.empty()) return true;
 
@@ -3727,8 +3727,32 @@ bool ReplayBlocks(const CChainParams& params, CCoinsView* view)
     LogPrintf("Replaying blocks\n");
 
     std::vector<const CBlockIndex*> pindexHeads;
-    const CBlockIndex* pindexFork = nullptr;
-    bool fGenesis = false;
+    const CBlockIndex* pindexFork = nullptr; // Latest block common to all heads.
+    bool fGenesis = false; // Whether 0 was in HeadBlocks.
+
+    // HeadBlocks is a list of chain tips that delimit the range of blocks from which partial updates
+    // may have been written. The first entry in the list is special, as it indicates the intended
+    // tip.
+    //
+    // Examples:
+    // * A simple addition of two blocks. The old tip was A, and we crashed in the middle of a flush
+    //   after connecting blocks B and C (where A<-B<-C is the hierarchy). HeadBlocks in this case
+    //   will be [C,A]. pindexFork will be A.
+    // * The first flush after database initialization. We crashed in the middle of the first flush,
+    //   after connecting blocks G (the genesis), A, and B (G<-A<-B). HeadBlocks in this case will
+    //   be [B,0] (where 0 is the all-zeroes uint256, to indicate 'nothing' as a range delimiter).
+    //   In the code below, fGenesis will be set to indicate this condition (and pindexFork will be
+    //   ignored).
+    // * A reorganization. The old chain was A<-B, and we crashed in the middle of a flush after
+    //   reorganizing to chain A<-C<-D. HeadBlocks in this case will be [D,B]. pindexFork will be A.
+    // * Multiple reorganizations (not implemented yet on the flushing side). The old chain was
+    //   A<-B, and parts from a first reorg to A<-C<-D and a second rerorg to A<-C<-E<-F were
+    //   wrtitten. HeadBlocks in this case will be [F,B,D], and pindexFork will be A.
+    //
+    // The algorithm below will roll back all blocks in between the forking point and any of the
+    // heads, excluding all blocks that are in the new tip's branch, in order of decreasing work
+    // (which guarantees that blocks are rolled back before their parents). Afterwards, all blocks
+    // between the forking point and the new tip are rolled forward, in order of increasing height.
 
     // Find last common ancestor of all heads.
     for (const uint256& hash : hashHeads) {
@@ -3749,6 +3773,10 @@ bool ReplayBlocks(const CChainParams& params, CCoinsView* view)
     for (size_t i = 1; i < pindexHeads.size(); ++i) {
         const CBlockIndex *pindexHead = pindexHeads[i];
         while (fGenesis ? pindexHead != nullptr : pindexHead != pindexFork) {
+            if (pindexHead->nHeight == 0) continue; // Skip the genesis block.
+            if (pindexHeads[0]->GetAncestor(pindexHead->nHeight) == pindexHead) {
+                continue; // Optimization: do not roll back blocks on the path towards the best tip.
+            }
             vpindexRollback.insert(pindexHead);
             pindexHead = pindexHead->pprev;
         }
@@ -3768,7 +3796,7 @@ bool ReplayBlocks(const CChainParams& params, CCoinsView* view)
     }
 
     // Roll forward from the forking point to the new tip.
-    int nForkHeight = fGenesis ? 1 : pindexFork->nHeight;
+    int nForkHeight = std::max(1, fGenesis ? 0 : pindexFork->nHeight); // Skip the genesis block.
     for (int nHeight = nForkHeight + 1; nHeight <= pindexHeads[0]->nHeight; ++nHeight) {
         LogPrintf("Rolling forward %s (%i)\n", pindexHeads[0]->GetAncestor(nHeight)->nHeight, nHeight);
         if (!RollforwardBlock(pindexHeads[0]->GetAncestor(nHeight), cache, params)) return false;
