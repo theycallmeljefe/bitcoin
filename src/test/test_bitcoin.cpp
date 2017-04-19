@@ -50,7 +50,7 @@ BasicTestingSetup::~BasicTestingSetup()
         g_connman.reset();
 }
 
-TestingSetup::TestingSetup(const std::string& chainName) : BasicTestingSetup(chainName)
+TestingSetup::TestingSetup(const std::string& chainName, CCoinsView* coinsdb) : BasicTestingSetup(chainName)
 {
     const CChainParams& chainparams = Params();
         // Ideally we'd move all the RPC tests to the functional testing framework
@@ -63,7 +63,7 @@ TestingSetup::TestingSetup(const std::string& chainName) : BasicTestingSetup(cha
         ForceSetArg("-datadir", pathTemp.string());
         mempool.setSanityCheck(1.0);
         pblocktree = new CBlockTreeDB(1 << 20, true);
-        pcoinsdbview = new CCoinsViewDB(1 << 23, true);
+        pcoinsdbview = coinsdb ? coinsdb : new CCoinsViewDB(1 << 23, true);
         pcoinsTip = new CCoinsViewCache(pcoinsdbview);
         if (!InitBlockIndex(chainparams)) {
             throw std::runtime_error("InitBlockIndex failed.");

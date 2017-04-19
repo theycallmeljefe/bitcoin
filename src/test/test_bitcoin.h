@@ -29,12 +29,12 @@ struct BasicTestingSetup {
  */
 class CConnman;
 struct TestingSetup: public BasicTestingSetup {
-    CCoinsViewDB *pcoinsdbview;
+    CCoinsView *pcoinsdbview;
     fs::path pathTemp;
     boost::thread_group threadGroup;
     CConnman* connman;
 
-    TestingSetup(const std::string& chainName = CBaseChainParams::MAIN);
+    TestingSetup(const std::string& chainName = CBaseChainParams::MAIN, CCoinsView* coinsdb = nullptr);
     ~TestingSetup();
 };
 
