@@ -12,6 +12,7 @@
 bool CCoinsView::GetCoins(const COutPoint &txid, CCoin &coin) const { return false; }
 bool CCoinsView::HaveCoins(const COutPoint &txid) const { return false; }
 uint256 CCoinsView::GetBestBlock() const { return uint256(); }
+std::vector<uint256> CCoinsView::GetHeadBlocks() const { return std::vector<uint256>(); }
 bool CCoinsView::BatchWrite(CCoinsMap &mapCoins, const uint256 &hashBlock) { return false; }
 CCoinsViewCursor *CCoinsView::Cursor() const { return 0; }
 
@@ -20,6 +21,7 @@ CCoinsViewBacked::CCoinsViewBacked(CCoinsView *viewIn) : base(viewIn) { }
 bool CCoinsViewBacked::GetCoins(const COutPoint &outpoint, CCoin &coin) const { return base->GetCoins(outpoint, coin); }
 bool CCoinsViewBacked::HaveCoins(const COutPoint &outpoint) const { return base->HaveCoins(outpoint); }
 uint256 CCoinsViewBacked::GetBestBlock() const { return base->GetBestBlock(); }
+std::vector<uint256> CCoinsViewBacked::GetHeadBlocks() const { return base->GetHeadBlocks(); }
 void CCoinsViewBacked::SetBackend(CCoinsView &viewIn) { base = &viewIn; }
 bool CCoinsViewBacked::BatchWrite(CCoinsMap &mapCoins, const uint256 &hashBlock) { return base->BatchWrite(mapCoins, hashBlock); }
 CCoinsViewCursor *CCoinsViewBacked::Cursor() const { return base->Cursor(); }
@@ -76,12 +78,12 @@ void CCoinsViewCache::AddCoin(const COutPoint &outpoint, CCoin&& coin, bool poss
     cachedCoinsUsage += ret.first->second.coins.DynamicMemoryUsage();
 }
 
-void AddCoins(CCoinsViewCache& cache, const CTransaction &tx, int nHeight) {
+void AddCoins(CCoinsViewCache& cache, const CTransaction &tx, int nHeight, bool fOverwrite) {
     bool fCoinbase = tx.IsCoinBase();
     const uint256& txid = tx.GetHash();
     for (size_t i = 0; i < tx.vout.size(); ++i) {
         if (!tx.vout[i].scriptPubKey.IsUnspendable()) {
-            cache.AddCoin(COutPoint(txid, i), CCoin(tx.vout[i], nHeight, fCoinbase), fCoinbase);
+            cache.AddCoin(COutPoint(txid, i), CCoin(tx.vout[i], nHeight, fCoinbase), fCoinbase || fOverwrite);
         }
     }
 }
