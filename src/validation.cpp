@@ -695,8 +695,8 @@ bool AcceptToMemoryPoolWorker(CTxMemPool& pool, CValidationState& state, const C
         // during reorgs to ensure COINBASE_MATURITY is still met.
         bool fSpendsCoinbase = false;
         BOOST_FOREACH(const CTxIn &txin, tx.vin) {
-            const CCoins *coins = view.AccessCoins(txin.prevout.hash);
-            if (coins->IsCoinBase()) {
+            const CCoin &coin = view.AccessCoin(txin.prevout);
+            if (coin.IsCoinBase()) {
                 fSpendsCoinbase = true;
                 break;
             }
@@ -1016,11 +1016,14 @@ bool GetTransaction(const uint256 &hash, CTransactionRef &txOut, const Consensus
 
     if (fAllowSlow) { // use coin database to locate block that contains transaction, and scan it
         int nHeight = -1;
-        {
+        size_t out = 0;
+        while (nHeight == -1 && out < 1024) { // Only try first 1024 outputs
             const CCoinsViewCache& view = *pcoinsTip;
-            const CCoins* coins = view.AccessCoins(hash);
-            if (coins)
-                nHeight = coins->nHeight;
+            const CCoin& coin = view.AccessCoin(COutPoint(hash, out));
+            if (!coin.IsPruned()) {
+                nHeight = coin.nHeight;
+            }
+            ++out;
         }
         if (nHeight > 0)
             pindexSlow = chainActive[nHeight];
@@ -1270,18 +1273,12 @@ void UpdateCoins(const CTransaction& tx, CCoinsViewCache& inputs, CTxUndo &txund
     if (!tx.IsCoinBase()) {
         txundo.vprevout.reserve(tx.vin.size());
         BOOST_FOREACH(const CTxIn &txin, tx.vin) {
-            CCoinsModifier coins = inputs.ModifyCoins(txin.prevout.hash);
-            unsigned nPos = txin.prevout.n;
-
-            if (nPos >= coins->vout.size() || coins->vout[nPos].IsNull())
-                assert(false);
-            // mark an outpoint spent, and construct undo information
-            txundo.vprevout.push_back(CCoin(std::move(coins->vout[nPos]), coins->nHeight, coins->fCoinBase));
-            coins->Spend(nPos);
+            txundo.vprevout.emplace_back();
+            inputs.SpendCoin(txin.prevout, &txundo.vprevout.back());
         }
     }
     // add outputs
-    inputs.ModifyNewCoins(tx.GetHash(), tx.IsCoinBase())->FromTx(tx, nHeight);
+    AddCoins(inputs, tx, nHeight);
 }
 
 void UpdateCoins(const CTransaction& tx, CCoinsViewCache& inputs, int nHeight)
@@ -1319,22 +1316,21 @@ bool CheckTxInputs(const CTransaction& tx, CValidationState& state, const CCoins
         for (unsigned int i = 0; i < tx.vin.size(); i++)
         {
             const COutPoint &prevout = tx.vin[i].prevout;
-            const CCoins *coins = inputs.AccessCoins(prevout.hash);
-            assert(coins);
+            const CCoin &coin = inputs.AccessCoin(prevout);
+            assert(!coin.IsPruned());
 
             // If prev is coinbase, check that it's matured
-            if (coins->IsCoinBase()) {
-                if (nSpendHeight - coins->nHeight < COINBASE_MATURITY)
+            if (coin.IsCoinBase()) {
+                if (nSpendHeight - coin.nHeight < COINBASE_MATURITY)
                     return state.Invalid(false,
                         REJECT_INVALID, "bad-txns-premature-spend-of-coinbase",
-                        strprintf("tried to spend coinbase at depth %d", nSpendHeight - coins->nHeight));
+                        strprintf("tried to spend coinbase at depth %d", nSpendHeight - coin.nHeight));
             }
 
             // Check for negative or overflow input values
-            nValueIn += coins->vout[prevout.n].nValue;
-            if (!MoneyRange(coins->vout[prevout.n].nValue) || !MoneyRange(nValueIn))
+            nValueIn += coin.out.nValue;
+            if (!MoneyRange(coin.out.nValue) || !MoneyRange(nValueIn))
                 return state.DoS(100, false, REJECT_INVALID, "bad-txns-inputvalues-outofrange");
-
         }
 
         if (nValueIn < tx.GetValueOut())
@@ -1497,23 +1493,27 @@ bool ApplyTxInUndo(CCoin&& undo, CCoinsViewCache& view, const COutPoint& out)
 {
     bool fClean = true;
 
-    CCoinsModifier coins = view.ModifyCoins(out.hash);
-    if (undo.nHeight != 0) {
-        if (!coins->IsPruned()) {
-            // verify that the undo data matches the utxo tx metadata
-            if (coins->fCoinBase != undo.fCoinBase || (uint32_t)coins->nHeight != undo.nHeight) fClean = false;
+    if (view.HaveCoins(out)) fClean = false;
+
+    if (undo.nHeight == 0) {
+        // Missing undo metadata (height and coinbase). Older versions included this
+        // information only in undo records for the last spend of a transactions'
+        // outputs. This implies that it must be present for some other output of the same tx.
+        COutPoint iter(out.hash, 0);
+        bool found = false;
+        while (iter.n * ::GetSerializeSize(CTxOut(), SER_NETWORK, PROTOCOL_VERSION) < MAX_BLOCK_BASE_SIZE) {
+            const auto alternate = view.AccessCoin(iter);
+            if (!alternate.IsPruned()) {
+                undo.nHeight = alternate.nHeight;
+                undo.fCoinBase = alternate.fCoinBase;
+                found = true;
+                break;
+            }
+            ++iter.n;
         }
-        // restore height/coinbase tx metadata from undo data
-        coins->fCoinBase = undo.fCoinBase;
-        coins->nHeight = undo.nHeight;
-    } else {
-        // undo data does not contain height/coinbase: it cannot be the last spent output of a tx
-        if (coins->IsPruned()) fClean = false;
+        if (!found) fClean = false;
     }
-    if (coins->IsAvailable(out.n)) fClean = false;
-    if (coins->vout.size() < out.n+1)
-        coins->vout.resize(out.n+1);
-    coins->vout[out.n] = std::move(undo.out);
+    view.AddCoin(out, std::move(undo), undo.fCoinBase);
 
     return fClean;
 }
@@ -1548,18 +1548,15 @@ static bool DisconnectBlock(const CBlock& block, CValidationState& state, const 
 
         // Check that all outputs are available and match the outputs in the block itself
         // exactly.
-        {
-        CCoinsModifier outs = view.ModifyCoins(hash);
-        outs->ClearUnspendable();
-
-        CCoins outsBlock(tx, pindex->nHeight);
-        // The CCoins serialization does not serialize negative numbers.
-        // No network rules currently depend on the version here, so an inconsistency is harmless
-        // but it must be corrected before txout nversion ever influences a network rule.
-        if (*outs != outsBlock) fClean = false;
-
-        // remove outputs
-        outs->Clear();
+        for (size_t o = 0; o < tx.vout.size(); o++) {
+            if (!tx.vout[o].scriptPubKey.IsUnspendable()) {
+                COutPoint out(hash, o);
+                CCoin coins;
+                view.SpendCoin(out, &coins);
+                if (tx.vout[o] != coins.out) {
+                    fClean = false;
+                }
+            }
         }
 
         // restore inputs
@@ -1757,10 +1754,12 @@ static bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockInd
 
     if (fEnforceBIP30) {
         for (const auto& tx : block.vtx) {
-            const CCoins* coins = view.AccessCoins(tx->GetHash());
-            if (coins && !coins->IsPruned())
-                return state.DoS(100, error("ConnectBlock(): tried to overwrite transaction"),
-                                 REJECT_INVALID, "bad-txns-BIP30");
+            for (size_t o = 0; o < tx->vout.size(); o++) {
+                if (view.HaveCoins(COutPoint(tx->GetHash(), o))) {
+                    return state.DoS(100, error("ConnectBlock(): tried to overwrite transaction"),
+                                     REJECT_INVALID, "bad-txns-BIP30");
+                }
+            }
         }
     }
 
@@ -1827,7 +1826,7 @@ static bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockInd
             // be in ConnectBlock because they require the UTXO set
             prevheights.resize(tx.vin.size());
             for (size_t j = 0; j < tx.vin.size(); j++) {
-                prevheights[j] = view.AccessCoins(tx.vin[j].prevout.hash)->nHeight;
+                prevheights[j] = view.AccessCoin(tx.vin[j].prevout).nHeight;
             }
 
             if (!SequenceLocks(tx, nLockTimeFlags, &prevheights, *pindex)) {
