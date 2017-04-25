@@ -249,6 +249,83 @@ bool CBlockTreeDB::LoadBlockIndexGuts(boost::function<CBlockIndex*(const uint256
     return true;
 }
 
+namespace {
+
+class CCoins
+{
+public:
+    //! whether transaction is a coinbase
+    bool fCoinBase;
+
+    //! unspent transaction outputs; spent outputs are .IsNull(); spent outputs at the end of the array are dropped
+    std::vector<CTxOut> vout;
+
+    //! at which height this transaction was included in the active block chain
+    int nHeight;
+
+    //! empty constructor
+    CCoins() : fCoinBase(false), vout(0), nHeight(0) { }
+
+    /**
+     * calculate number of bytes for the bitmask, and its number of non-zero bytes
+     * each bit in the bitmask represents the availability of one output, but the
+     * availabilities of the first two outputs are encoded separately
+     */
+    void CalcMaskSize(unsigned int &nBytes, unsigned int &nNonzeroBytes) const {
+        unsigned int nLastUsedByte = 0;
+        for (unsigned int b = 0; 2+b*8 < vout.size(); b++) {
+            bool fZero = true;
+            for (unsigned int i = 0; i < 8 && 2+b*8+i < vout.size(); i++) {
+                if (!vout[2+b*8+i].IsNull()) {
+                    fZero = false;
+                    continue;
+                }
+            }
+            if (!fZero) {
+                nLastUsedByte = b + 1;
+                nNonzeroBytes++;
+            }
+        }
+        nBytes += nLastUsedByte;
+    }
+
+    template<typename Stream>
+    void Unserialize(Stream &s) {
+        unsigned int nCode = 0;
+        // version
+        int nVersionDummy;
+        ::Unserialize(s, VARINT(nVersionDummy));
+        // header code
+        ::Unserialize(s, VARINT(nCode));
+        fCoinBase = nCode & 1;
+        std::vector<bool> vAvail(2, false);
+        vAvail[0] = (nCode & 2) != 0;
+        vAvail[1] = (nCode & 4) != 0;
+        unsigned int nMaskCode = (nCode / 8) + ((nCode & 6) != 0 ? 0 : 1);
+        // spentness bitmask
+        while (nMaskCode > 0) {
+            unsigned char chAvail = 0;
+            ::Unserialize(s, chAvail);
+            for (unsigned int p = 0; p < 8; p++) {
+                bool f = (chAvail & (1 << p)) != 0;
+                vAvail.push_back(f);
+            }
+            if (chAvail != 0)
+                nMaskCode--;
+        }
+        // txouts themself
+        vout.assign(vAvail.size(), CTxOut());
+        for (unsigned int i = 0; i < vAvail.size(); i++) {
+            if (vAvail[i])
+                ::Unserialize(s, REF(CTxOutCompressor(vout[i])));
+        }
+        // coinbase height
+        ::Unserialize(s, VARINT(nHeight));
+    }
+};
+
+}
+
 bool CCoinsViewDB::Upgrade() {
     std::unique_ptr<CDBIterator> pcursor(db.NewIterator());
     pcursor->Seek(std::make_pair(DB_COINS, uint256()));
