@@ -32,17 +32,8 @@ void CCoins::CalcMaskSize(unsigned int &nBytes, unsigned int &nNonzeroBytes) con
     nBytes += nLastUsedByte;
 }
 
-bool CCoins::Spend(uint32_t nPos) 
-{
-    if (nPos >= vout.size() || vout[nPos].IsNull())
-        return false;
-    vout[nPos].SetNull();
-    Cleanup();
-    return true;
-}
-
-bool CCoinsView::GetCoins(const COutPoint &outpoint, CCoin &coin) const { return false; }
-bool CCoinsView::HaveCoins(const COutPoint &outpoint) const { return false; }
+bool CCoinsView::GetCoins(const COutPoint &txid, CCoin &coin) const { return false; }
+bool CCoinsView::HaveCoins(const COutPoint &txid) const { return false; }
 uint256 CCoinsView::GetBestBlock() const { return uint256(); }
 bool CCoinsView::BatchWrite(CCoinsMap &mapCoins, const uint256 &hashBlock) { return false; }
 CCoinsViewCursor *CCoinsView::Cursor() const { return 0; }
