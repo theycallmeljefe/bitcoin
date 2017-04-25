@@ -1493,7 +1493,7 @@ bool AbortNode(CValidationState& state, const std::string& strMessage, const std
  * @param out The out point that corresponds to the tx input.
  * @return True on success.
  */
-bool ApplyTxInUndo(const CCoin& undo, CCoinsViewCache& view, const COutPoint& out)
+bool ApplyTxInUndo(CCoin&& undo, CCoinsViewCache& view, const COutPoint& out)
 {
     bool fClean = true;
 
@@ -1513,7 +1513,7 @@ bool ApplyTxInUndo(const CCoin& undo, CCoinsViewCache& view, const COutPoint& ou
     if (coins->IsAvailable(out.n)) fClean = false;
     if (coins->vout.size() < out.n+1)
         coins->vout.resize(out.n+1);
-    coins->vout[out.n] = undo.out;
+    coins->vout[out.n] = std::move(undo.out);
 
     return fClean;
 }
@@ -1564,13 +1564,12 @@ static bool DisconnectBlock(const CBlock& block, CValidationState& state, const 
 
         // restore inputs
         if (i > 0) { // not coinbases
-            const CTxUndo &txundo = blockUndo.vtxundo[i-1];
+            CTxUndo &txundo = blockUndo.vtxundo[i-1];
             if (txundo.vprevout.size() != tx.vin.size())
                 return error("DisconnectBlock(): transaction and undo data inconsistent");
             for (unsigned int j = tx.vin.size(); j-- > 0;) {
                 const COutPoint &out = tx.vin[j].prevout;
-                const CCoin &undo = txundo.vprevout[j];
-                if (!ApplyTxInUndo(undo, view, out))
+                if (!ApplyTxInUndo(std::move(txundo.vprevout[j]), view, out))
                     fClean = false;
             }
         }
