@@ -1276,11 +1276,9 @@ void UpdateCoins(const CTransaction& tx, CCoinsViewCache& inputs, CTxUndo &txund
             if (nPos >= coins->vout.size() || coins->vout[nPos].IsNull())
                 assert(false);
             // mark an outpoint spent, and construct undo information
-            txundo.vprevout.push_back(CTxInUndo(coins->vout[nPos]));
-            coins->Spend(nPos);
-            CTxInUndo& undo = txundo.vprevout.back();
-            undo.nHeight = coins->nHeight;
-            undo.fCoinBase = coins->fCoinBase;
+            txundo.vprevout.emplace_back(coins->vout[nPos], coins->nHeight, coins->fCoinBase);
+            bool ret = coins->Spend(nPos);
+            assert(ret);
         }
     }
     // add outputs
@@ -1494,13 +1492,13 @@ enum DisconnectResult
 };
 
 /**
- * Apply the undo operation of a CTxInUndo to the given chain state.
- * @param undo The undo object.
+ * Restore the UTXO in a Coin at a given COutPoint
+ * @param undo The Coin to be restored.
  * @param view The coins view to which to apply the changes.
  * @param out The out point that corresponds to the tx input.
  * @return True when the UTXO state was consistent with the undo data.
  */
-DisconnectResult ApplyTxInUndo(const CTxInUndo& undo, CCoinsViewCache& view, const COutPoint& out)
+DisconnectResult ApplyTxInUndo(const Coin& undo, CCoinsViewCache& view, const COutPoint& out)
 {
     bool fClean = true;
 
@@ -1521,7 +1519,7 @@ DisconnectResult ApplyTxInUndo(const CTxInUndo& undo, CCoinsViewCache& view, con
     if (coins->IsAvailable(out.n)) fClean = false; // overwriting existing output
     if (coins->vout.size() < out.n+1)
         coins->vout.resize(out.n+1);
-    coins->vout[out.n] = undo.txout;
+    coins->vout[out.n] = undo.out;
 
     return fClean ? DISCONNECT_OK : DISCONNECT_UNCLEAN;
 }
@@ -1577,7 +1575,7 @@ static DisconnectResult DisconnectBlock(const CBlock& block, const CBlockIndex* 
             }
             for (unsigned int j = tx.vin.size(); j-- > 0;) {
                 const COutPoint &out = tx.vin[j].prevout;
-                const CTxInUndo &undo = txundo.vprevout[j];
+                const Coin &undo = txundo.vprevout[j];
                 DisconnectResult res = ApplyTxInUndo(undo, view, out);
                 if (res == DISCONNECT_FAILED) return res;
                 fClean = fClean && res != DISCONNECT_UNCLEAN;
