@@ -169,7 +169,7 @@ int main(int argc, char **argv)
         {
             try
             {
-                CCoins block;
+                Coin block;
                 ds >> block;
             } catch (const std::ios_base::failure& e) {return 0;}
             break;
