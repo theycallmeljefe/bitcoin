@@ -78,6 +78,8 @@ public:
     uint256 GetBestBlock() const;
     bool BatchWrite(CCoinsMap &mapCoins, const uint256 &hashBlock);
     CCoinsViewCursor *Cursor() const;
+
+    bool Upgrade();
 };
 
 /** Specialization of CCoinsViewCursor to iterate over a CCoinsViewDB */

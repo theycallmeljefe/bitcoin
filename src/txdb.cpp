@@ -243,3 +243,44 @@ bool CBlockTreeDB::LoadBlockIndexGuts(boost::function<CBlockIndex*(const uint256
 
     return true;
 }
+
+bool CCoinsViewDB::Upgrade() {
+    std::unique_ptr<CDBIterator> pcursor(db.NewIterator());
+    pcursor->Seek(std::make_pair(DB_COINS, uint256()));
+    if (!pcursor->Valid()) {
+        return true;
+    }
+
+    LogPrintf("Upgrading database...\n");
+    size_t batch_size = 1 << 24;
+    CDBBatch batch(db);
+    while (pcursor->Valid()) {
+        boost::this_thread::interruption_point();
+        std::pair<unsigned char, uint256> key;
+        if (pcursor->GetKey(key) && key.first == DB_COINS) {
+            CCoins oldcoins;
+            if (!pcursor->GetValue(oldcoins)) {
+                return error("%s: cannot parse CCoins record", __func__);
+            }
+            COutPoint outpoint(key.second, 0);
+            for (size_t i = 0; i < oldcoins.vout.size(); ++i) {
+                if (!oldcoins.vout[i].IsNull() && !oldcoins.vout[i].scriptPubKey.IsUnspendable()) {
+                    Coin newcoin(std::move(oldcoins.vout[i]), oldcoins.nHeight, oldcoins.fCoinBase);
+                    outpoint.n = i;
+                    CoinsEntry entry(&outpoint);
+                    batch.Write(entry, newcoin);
+                }
+            }
+            batch.Erase(key);
+            if (batch.SizeEstimate() > batch_size) {
+                db.WriteBatch(batch);
+                batch.Clear();
+            }
+            pcursor->Next();
+        } else {
+            break;
+        }
+    }
+    db.WriteBatch(batch);
+    return true;
+}
