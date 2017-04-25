@@ -55,7 +55,7 @@ class BlockchainTest(BitcoinTestFramework):
         assert_equal(res['transactions'], 200)
         assert_equal(res['height'], 200)
         assert_equal(res['txouts'], 200)
-        assert_equal(res['bytes_serialized'], 13924),
+        assert_equal(res['bytes_serialized'], 13788),
         assert_equal(len(res['bestblock']), 64)
         assert_equal(len(res['hash_serialized_2']), 64)
 
