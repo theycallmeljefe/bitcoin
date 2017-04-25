@@ -1276,11 +1276,8 @@ void UpdateCoins(const CTransaction& tx, CCoinsViewCache& inputs, CTxUndo &txund
             if (nPos >= coins->vout.size() || coins->vout[nPos].IsNull())
                 assert(false);
             // mark an outpoint spent, and construct undo information
-            txundo.vprevout.push_back(CTxInUndo(coins->vout[nPos]));
+            txundo.vprevout.push_back(CCoin(std::move(coins->vout[nPos]), coins->nHeight, coins->fCoinBase));
             coins->Spend(nPos);
-            CTxInUndo& undo = txundo.vprevout.back();
-            undo.nHeight = coins->nHeight;
-            undo.fCoinBase = coins->fCoinBase;
         }
     }
     // add outputs
@@ -1490,13 +1487,13 @@ bool AbortNode(CValidationState& state, const std::string& strMessage, const std
 } // anon namespace
 
 /**
- * Apply the undo operation of a CTxInUndo to the given chain state.
- * @param undo The undo object.
+ * Restore the UTXO in a CCoin at a given COutPoint
+ * @param undo The CCoin to be restored.
  * @param view The coins view to which to apply the changes.
  * @param out The out point that corresponds to the tx input.
  * @return True on success.
  */
-bool ApplyTxInUndo(const CTxInUndo& undo, CCoinsViewCache& view, const COutPoint& out)
+bool ApplyTxInUndo(const CCoin& undo, CCoinsViewCache& view, const COutPoint& out)
 {
     bool fClean = true;
 
@@ -1516,7 +1513,7 @@ bool ApplyTxInUndo(const CTxInUndo& undo, CCoinsViewCache& view, const COutPoint
     if (coins->IsAvailable(out.n)) fClean = false;
     if (coins->vout.size() < out.n+1)
         coins->vout.resize(out.n+1);
-    coins->vout[out.n] = undo.txout;
+    coins->vout[out.n] = undo.out;
 
     return fClean;
 }
@@ -1572,7 +1569,7 @@ static bool DisconnectBlock(const CBlock& block, CValidationState& state, const 
                 return error("DisconnectBlock(): transaction and undo data inconsistent");
             for (unsigned int j = tx.vin.size(); j-- > 0;) {
                 const COutPoint &out = tx.vin[j].prevout;
-                const CTxInUndo &undo = txundo.vprevout[j];
+                const CCoin &undo = txundo.vprevout[j];
                 if (!ApplyTxInUndo(undo, view, out))
                     fClean = false;
             }
