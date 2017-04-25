@@ -40,7 +40,7 @@ static const struct {
       {RF_JSON, "json"},
 };
 
-struct CCoin {
+struct CRESTCoin {
     uint32_t nHeight;
     CTxOut out;
 
@@ -495,7 +495,7 @@ static bool rest_getutxos(HTTPRequest* req, const std::string& strURIPart)
 
     // check spentness and form a bitmap (as well as a JSON capable human-readable string representation)
     std::vector<unsigned char> bitmap;
-    std::vector<CCoin> outs;
+    std::vector<CRESTCoin> outs;
     std::string bitmapStringRepresentation;
     std::vector<bool> hits;
     bitmap.resize((vOutPoints.size() + 7) / 8);
@@ -521,7 +521,7 @@ static bool rest_getutxos(HTTPRequest* req, const std::string& strURIPart)
                     hit = true;
                     // Safe to index into vout here because IsAvailable checked if it's off the end of the array, or if
                     // n is valid but points to an already spent output (IsNull).
-                    CCoin coin;
+                    CRESTCoin coin;
                     coin.nHeight = coins.nHeight;
                     coin.out = coins.vout.at(vOutPoints[i].n);
                     assert(!coin.out.IsNull());
@@ -568,7 +568,7 @@ static bool rest_getutxos(HTTPRequest* req, const std::string& strURIPart)
         objGetUTXOResponse.push_back(Pair("bitmap", bitmapStringRepresentation));
 
         UniValue utxos(UniValue::VARR);
-        BOOST_FOREACH (const CCoin& coin, outs) {
+        BOOST_FOREACH (const CRESTCoin& coin, outs) {
             UniValue utxo(UniValue::VOBJ);
             utxo.push_back(Pair("height", (int32_t)coin.nHeight));
             utxo.push_back(Pair("value", ValueFromAmount(coin.out.nValue)));

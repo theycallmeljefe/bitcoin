@@ -20,6 +20,81 @@
 #include <boost/foreach.hpp>
 #include <unordered_map>
 
+/**
+ * A UTXO entry.
+ *
+ * Serialized format:
+ * - VARINT(coinbase + height * 2)
+ * - the non-spent CTxOut (via CTxOutCompressor)
+ */
+class CCoin
+{
+public:
+    //! whether transaction is a coinbase
+    bool fCoinBase;
+
+    //! unspent transaction outputs; spent outputs are .IsNull()
+    CTxOut out;
+
+    //! at which height this transaction was included in the active block chain
+    uint32_t nHeight;
+
+    //! construct a CCoin from a CTransaction, at a given height
+    CCoin(CTxOut&& outIn, int nHeightIn, bool fCoinBaseIn) : fCoinBase(fCoinBaseIn), out(std::move(outIn)), nHeight(nHeightIn) {}
+    CCoin(const CTxOut& outIn, int nHeightIn, bool fCoinBaseIn) : fCoinBase(fCoinBaseIn), out(outIn), nHeight(nHeightIn) {}
+
+    void Clear() {
+        out.SetNull();
+        fCoinBase = false;
+        nHeight = 0;
+    }
+
+    //! empty constructor
+    CCoin() : fCoinBase(false), nHeight(0) { }
+
+    //! equality test
+    friend bool operator==(const CCoin &a, const CCoin &b) {
+         // Empty CCoin objects are always equal.
+         if (a.IsPruned() && b.IsPruned())
+             return true;
+         return a.fCoinBase == b.fCoinBase &&
+                a.nHeight == b.nHeight &&
+                a.out == b.out;
+    }
+    friend bool operator!=(const CCoin &a, const CCoin &b) {
+        return !(a == b);
+    }
+
+    bool IsCoinBase() const {
+        return fCoinBase;
+    }
+
+    template<typename Stream>
+    void Serialize(Stream &s) const {
+        assert(!IsPruned());
+        uint32_t code = nHeight * 2 + fCoinBase;
+        ::Serialize(s, VARINT(code));
+        ::Serialize(s, CTxOutCompressor(REF(out)));
+    }
+
+    template<typename Stream>
+    void Unserialize(Stream &s) {
+        uint32_t code = 0;
+        ::Unserialize(s, VARINT(code));
+        nHeight = code >> 1;
+        fCoinBase = code & 1;
+        ::Unserialize(s, REF(CTxOutCompressor(out)));
+    }
+
+    bool IsPruned() const {
+        return out.IsNull();
+    }
+
+    size_t DynamicMemoryUsage() const {
+        return memusage::DynamicUsage(out.scriptPubKey);
+    }
+};
+
 /** 
  * Pruned version of CTransaction: only retains metadata and unspent transaction outputs
  *
