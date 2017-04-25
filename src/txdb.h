@@ -79,6 +79,7 @@ public:
     bool BatchWrite(CCoinsMap &mapCoins, const uint256 &hashBlock) override;
     CCoinsViewCursor *Cursor() const override;
 
+    bool Upgrade();
     size_t EstimateSize() const override;
 };
 
