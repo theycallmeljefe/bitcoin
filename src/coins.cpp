@@ -69,7 +69,7 @@ size_t CCoinsViewCache::DynamicMemoryUsage() const {
     return memusage::DynamicUsage(cacheCoins) + cachedCoinsUsage;
 }
 
-CCoinsMap::const_iterator CCoinsViewCache::FetchCoins(const uint256 &txid) const {
+CCoinsMap::iterator CCoinsViewCache::FetchCoins(const uint256 &txid) const {
     CCoinsMap::iterator it = cacheCoins.find(txid);
     if (it != cacheCoins.end())
         return it;
@@ -152,6 +152,55 @@ CCoinsModifier CCoinsViewCache::ModifyNewCoins(const uint256 &txid, bool coinbas
     return CCoinsModifier(*this, ret.first, 0);
 }
 
+void CCoinsViewCache::AddCoin(const COutPoint &outpoint, CCoin&& coin, bool possible_overwrite) {
+    assert(!coin.IsPruned());
+    auto ret = cacheCoins.emplace(std::piecewise_construct, std::forward_as_tuple(outpoint.hash), std::forward_as_tuple(nullptr));
+    bool fresh = false;
+    if (!ret.second) {
+        cachedCoinsUsage -= ret.first->second.coins.DynamicMemoryUsage();
+    }
+    if (!possible_overwrite) {
+        if (ret.first->second.coins.IsAvailable(outpoint.n)) {
+            throw std::logic_error("Adding new coin that replaces non-pruned entry");
+        }
+        fresh = !(ret.first->second.flags & CCoinsCacheEntry::DIRTY);
+    }
+    if (ret.first->second.coins.vout.size() <= outpoint.n) {
+        ret.first->second.coins.vout.resize(outpoint.n + 1);
+    }
+    ret.first->second.coins.vout[outpoint.n] = std::move(coin.out);
+    ret.first->second.coins.nHeight = coin.nHeight;
+    ret.first->second.coins.fCoinBase = coin.fCoinBase;
+    ret.first->second.flags |= CCoinsCacheEntry::DIRTY | (fresh ? CCoinsCacheEntry::FRESH : 0);
+    cachedCoinsUsage += ret.first->second.coins.DynamicMemoryUsage();
+}
+
+void AddCoins(CCoinsViewCache& cache, const CTransaction &tx, int nHeight) {
+    bool fCoinbase = tx.IsCoinBase();
+    const uint256& txid = tx.GetHash();
+    for (size_t i = 0; i < tx.vout.size(); ++i) {
+        if (!tx.vout[i].scriptPubKey.IsUnspendable()) {
+            cache.AddCoin(COutPoint(txid, i), CCoin(tx.vout[i], nHeight, fCoinbase), fCoinbase);
+        }
+    }
+}
+
+void CCoinsViewCache::SpendCoin(const COutPoint &outpoint, CCoin* moveout) {
+    CCoinsMap::iterator it = FetchCoins(outpoint.hash);
+    if (it == cacheCoins.end()) return;
+    cachedCoinsUsage -= it->second.coins.DynamicMemoryUsage();
+    if (moveout && it->second.coins.IsAvailable(outpoint.n)) {
+        *moveout = CCoin(std::move(it->second.coins.vout[outpoint.n]), it->second.coins.nHeight, it->second.coins.fCoinBase);
+    }
+    it->second.coins.Spend(outpoint.n);
+    if (it->second.coins.IsPruned() && it->second.flags & CCoinsCacheEntry::FRESH) {
+        cacheCoins.erase(it);
+    } else {
+        cachedCoinsUsage += it->second.coins.DynamicMemoryUsage();
+        it->second.flags |= CCoinsCacheEntry::DIRTY;
+    }
+}
+
 const CCoins* CCoinsViewCache::AccessCoins(const uint256 &txid) const {
     CCoinsMap::const_iterator it = FetchCoins(txid);
     if (it == cacheCoins.end()) {
@@ -161,6 +210,18 @@ const CCoins* CCoinsViewCache::AccessCoins(const uint256 &txid) const {
     }
 }
 
+static const CCoin coinEmpty;
+
+const CCoin CCoinsViewCache::AccessCoin(const COutPoint &outpoint) const {
+    CCoinsMap::const_iterator it = FetchCoins(outpoint.hash);
+    if (it == cacheCoins.end() || !it->second.coins.IsAvailable(outpoint.n)) {
+        return coinEmpty;
+    } else {
+        return CCoin(it->second.coins.vout[outpoint.n], it->second.coins.nHeight, it->second.coins.fCoinBase);
+    }
+}
+
+
 bool CCoinsViewCache::HaveCoins(const uint256 &txid) const {
     CCoinsMap::const_iterator it = FetchCoins(txid);
     // We're using vtx.empty() instead of IsPruned here for performance reasons,
@@ -168,6 +229,11 @@ bool CCoinsViewCache::HaveCoins(const uint256 &txid) const {
     // in a reorganization (which wipes vout entirely, as opposed to spending
     // which just cleans individual outputs).
     return (it != cacheCoins.end() && !it->second.coins.vout.empty());
+}
+
+bool CCoinsViewCache::HaveCoins(const COutPoint &outpoint) const {
+    CCoinsMap::const_iterator it = FetchCoins(outpoint.hash);
+    return (it != cacheCoins.end() && it->second.coins.IsAvailable(outpoint.n));
 }
 
 bool CCoinsViewCache::HaveCoinsInCache(const uint256 &txid) const {
