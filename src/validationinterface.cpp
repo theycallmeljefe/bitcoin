@@ -79,11 +79,7 @@ struct CMainSignalsInstance {
 static CMainSignals g_signals;
 
 CMainSignals::CMainSignals() {
-    internals = new CMainSignalsInstance();
-}
-
-CMainSignals::~CMainSignals() {
-    delete internals;
+    internals.reset(new CMainSignalsInstance());
 }
 
 void CMainSignals::RegisterBackgroundSignalScheduler(CScheduler& scheduler) {
