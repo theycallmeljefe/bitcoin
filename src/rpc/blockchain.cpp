@@ -773,6 +773,21 @@ struct CCoinsStats
     CCoinsStats() : nHeight(0), nTransactions(0), nTransactionOutputs(0), nSerializedSize(0), nTotalAmount(0) {}
 };
 
+static void ApplyStats(CCoinsStats &stats, CHashWriter& ss, const uint256& hash, const std::map<uint32_t, CCoin>& outputs)
+{
+    ss << hash;
+    ss << VARINT(outputs.begin()->second.nHeight * 2 + outputs.begin()->second.fCoinBase);
+    stats.nTransactions++;
+    for (const auto output : outputs) {
+        ss << VARINT(output.first + 1);
+        ss << *(const CScriptBase*)(&output.second.out.scriptPubKey);
+        ss << VARINT(output.second.out.nValue);
+        stats.nTransactionOutputs++;
+        stats.nTotalAmount += output.second.out.nValue;
+    }
+    ss << VARINT(0);
+}
+
 //! Calculate statistics about the unspent transaction output set
 static bool GetUTXOStats(CCoinsView *view, CCoinsStats &stats)
 {
@@ -791,21 +806,15 @@ static bool GetUTXOStats(CCoinsView *view, CCoinsStats &stats)
         uint256 key;
         CCoins coins;
         if (pcursor->GetKey(key) && pcursor->GetValue(coins)) {
-            stats.nTransactions++;
-            ss << key;
-            ss << VARINT(coins.nHeight * 2 + coins.fCoinBase);
+            std::map<uint32_t, CCoin> outputs;
             for (unsigned int i=0; i<coins.vout.size(); i++) {
-                const CTxOut &out = coins.vout[i];
+                CTxOut &out = coins.vout[i];
                 if (!out.IsNull()) {
-                    stats.nTransactionOutputs++;
-                    ss << VARINT(i+1);
-                    ss << *(const CScriptBase*)(&out.scriptPubKey);
-                    ss << VARINT(out.nValue);
-                    nTotalAmount += out.nValue;
+                    outputs[i] = CCoin(std::move(out), coins.nHeight, coins.fCoinBase);
                 }
             }
+            ApplyStats(stats, ss, key, outputs);
             stats.nSerializedSize += 32 + pcursor->GetValueSize();
-            ss << VARINT(0);
         } else {
             return error("%s: unable to read value", __func__);
         }
