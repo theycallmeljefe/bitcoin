@@ -129,7 +129,6 @@ void GetDevURandom(unsigned char *ent32)
 /** Get 32 bytes of system entropy. */
 void GetOSRand(unsigned char *ent32)
 {
-    bool fUseFallback = false;
 #if defined(WIN32)
     HCRYPTPROV hProvider;
     int ret = CryptAcquireContextW(&hProvider, NULL, NULL, PROV_RSA_FULL, CRYPT_VERIFYCONTEXT);
@@ -141,37 +140,34 @@ void GetOSRand(unsigned char *ent32)
         RandFailure();
     }
     CryptReleaseContext(hProvider, 0);
-#elif defined(HAVE_SYS_GETRANDOM)
+#else
+#  if defined(HAVE_SYS_GETRANDOM)
     /* Linux. From the getrandom(2) man page:
      * "If the urandom source has been initialized, reads of up to 256 bytes
      * will always return as many bytes as requested and will not be
      * interrupted by signals."
      */
     int rv = syscall(SYS_getrandom, ent32, NUM_OS_RANDOM_BYTES, 0);
-    if (rv != NUM_OS_RANDOM_BYTES) {
-        if (rv < 0 && errno == ENOSYS) {
-            /* Fallback for kernel <3.17: the return value will be -1 and errno
-             * ENOSYS if the syscall is not available, in that case fall back
-             * to /dev/urandom.
-             */
-            fUseFallback = true;
-        } else {
-            RandFailure();
-        }
+    if (rv == NUM_OS_RANDOM_BYTES) return;
+    if (rv >= 0 || errno != ENOSYS) {
+        /* Fallback for kernel <3.17: the return value will be -1 and errno
+-        * ENOSYS if the syscall is not available, in that case fall through
+-        * to /dev/urandom (see further).
+-        */
+        RandFailure();
     }
-#elif defined(HAVE_GETENTROPY)
+#  endif
+#  if defined(HAVE_GETENTROPY)
     /* On OpenBSD this can return up to 256 bytes of entropy, will return an
      * error if more are requested.
      * The call cannot return less than the requested number of bytes.
      */
-    if (getentropy(ent32, NUM_OS_RANDOM_BYTES) != 0) {
-        if (errno == ENOSYS) {
-            fUseFallback = true;
-        } else {
-            RandFailure();
-        }
+    if (getentropy(ent32, NUM_OS_RANDOM_BYTES) == 0) return;
+    if (errno != ENOSYS) {
+        RandFailure();
     }
-#elif defined(HAVE_SYSCTL_ARND)
+#  endif
+#  if defined(HAVE_SYSCTL_ARND)
     /* FreeBSD and similar. It is possible for the call to return less
      * bytes than requested, so need to read in a loop.
      */
@@ -184,15 +180,13 @@ void GetOSRand(unsigned char *ent32)
         }
         have += len;
     } while (have < NUM_OS_RANDOM_BYTES);
-#else
+#  else
     /* Fall back to /dev/urandom if there is no specific method implemented to
      * get system entropy for this OS.
      */
-    fUseFallback = true;
+    GetDevURandom(ent32);
+#  endif
 #endif
-    if (fUseFallback) {
-        GetDevURandom(ent32);
-    }
 }
 
 void GetRandBytes(unsigned char* buf, int num)
