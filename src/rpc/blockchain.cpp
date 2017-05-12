@@ -766,11 +766,10 @@ struct CCoinsStats
     uint256 hashBlock;
     uint64_t nTransactions;
     uint64_t nTransactionOutputs;
-    uint64_t nSerializedSize;
     uint256 hashSerialized;
     CAmount nTotalAmount;
 
-    CCoinsStats() : nHeight(0), nTransactions(0), nTransactionOutputs(0), nSerializedSize(0), nTotalAmount(0) {}
+    CCoinsStats() : nHeight(0), nTransactions(0), nTransactionOutputs(0), nTotalAmount(0) {}
 };
 
 static void ApplyStats(CCoinsStats &stats, CHashWriter& ss, const uint256& hash, const std::map<uint32_t, Coin>& outputs)
@@ -778,15 +777,12 @@ static void ApplyStats(CCoinsStats &stats, CHashWriter& ss, const uint256& hash,
     assert(!outputs.empty());
     ss << hash;
     ss << VARINT(outputs.begin()->second.nHeight * 2 + outputs.begin()->second.fCoinBase);
-    stats.nSerializedSize += 30 + 4 * outputs.size(); // Account for 1/16 chance of txid duplication in LevelDB.
     stats.nTransactions++;
     for (const auto output : outputs) {
         ss << VARINT(output.first + 1);
         ss << *(const CScriptBase*)(&output.second.out.scriptPubKey);
         ss << VARINT(output.second.out.nValue);
         stats.nTransactionOutputs++;
-        stats.nSerializedSize += ::GetSerializeSize(VARINT(output.first), SER_DISK, 0);
-        stats.nSerializedSize += ::GetSerializeSize(output.second, SER_DISK, 0);
         stats.nTotalAmount += output.second.out.nValue;
     }
     ss << VARINT(0);
@@ -891,7 +887,6 @@ UniValue gettxoutsetinfo(const JSONRPCRequest& request)
             "  \"bestblock\": \"hex\",   (string) the best block hash hex\n"
             "  \"transactions\": n,      (numeric) The number of transactions\n"
             "  \"txouts\": n,            (numeric) The number of output transactions\n"
-            "  \"bytes_serialized\": n,  (numeric) The serialized size\n"
             "  \"hash_serialized\": \"hash\",   (string) The serialized hash\n"
             "  \"total_amount\": x.xxx          (numeric) The total amount\n"
             "}\n"
@@ -909,7 +904,6 @@ UniValue gettxoutsetinfo(const JSONRPCRequest& request)
         ret.push_back(Pair("bestblock", stats.hashBlock.GetHex()));
         ret.push_back(Pair("transactions", (int64_t)stats.nTransactions));
         ret.push_back(Pair("txouts", (int64_t)stats.nTransactionOutputs));
-        ret.push_back(Pair("bytes_serialized", (int64_t)stats.nSerializedSize));
         ret.push_back(Pair("hash_serialized_2", stats.hashSerialized.GetHex()));
         ret.push_back(Pair("total_amount", ValueFromAmount(stats.nTotalAmount)));
     } else {
