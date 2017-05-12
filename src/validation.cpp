@@ -1559,6 +1559,7 @@ static DisconnectResult DisconnectBlock(const CBlock& block, const CBlockIndex* 
                 if (res == DISCONNECT_FAILED) return DISCONNECT_FAILED;
                 fClean = fClean && res != DISCONNECT_UNCLEAN;
             }
+            // At this point, all of txundo.vprevout should have been moved out.
         }
     }
 
