@@ -80,6 +80,7 @@ public:
     CCoinsViewCursor *Cursor() const;
 
     bool Upgrade();
+    size_t EstimateSize() const override;
 };
 
 /** Specialization of CCoinsViewCursor to iterate over a CCoinsViewDB */
