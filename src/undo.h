@@ -7,6 +7,7 @@
 #define BITCOIN_UNDO_H
 
 #include "compressor.h" 
+#include "consensus/consensus.h"
 #include "primitives/transaction.h"
 #include "serialize.h"
 
@@ -55,6 +56,8 @@ public:
     TxInUndoDeserializer(Coin* coin) : txout(coin) {}
 };
 
+static const size_t MAX_OUTPUTS_PER_BLOCK = MAX_BLOCK_BASE_SIZE / ::GetSerializeSize(CTxOut(), SER_NETWORK, PROTOCOL_VERSION);
+
 /** Undo information for a CTransaction */
 class CTxUndo
 {
@@ -77,7 +80,7 @@ public:
         // TODO: avoid reimplementing vector deserializer
         uint64_t count = 0;
         ::Unserialize(s, COMPACTSIZE(count));
-        if (count > 111111) { // TODO: avoid hardcoding max txouts per tx
+        if (count > MAX_OUTPUTS_PER_BLOCK) {
             throw std::ios_base::failure("Too many input undo records");
         }
         vprevout.resize(count);
