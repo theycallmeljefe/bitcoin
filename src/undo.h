@@ -18,7 +18,7 @@
  */
 class TxInUndoSerializer
 {
-    Coin* txout;
+    const Coin* txout;
 
 public:
     template<typename Stream>
@@ -31,6 +31,14 @@ public:
         ::Serialize(s, CTxOutCompressor(REF(txout->out)));
     }
 
+    TxInUndoSerializer(const Coin* coin) : txout(coin) {}
+};
+
+class TxInUndoDeserializer
+{
+    Coin* txout;
+
+public:
     template<typename Stream>
     void Unserialize(Stream &s) {
         unsigned int nCode = 0;
@@ -44,7 +52,7 @@ public:
         ::Unserialize(s, REF(CTxOutCompressor(REF(txout->out))));
     }
 
-    TxInUndoSerializer(const Coin* coin) : txout(const_cast<Coin*>(coin)) {}
+    TxInUndoDeserializer(Coin* coin) : txout(coin) {}
 };
 
 /** Undo information for a CTransaction */
@@ -74,7 +82,7 @@ public:
         }
         vprevout.resize(count);
         for (auto& prevout : vprevout) {
-            ::Unserialize(s, REF(TxInUndoSerializer(&prevout)));
+            ::Unserialize(s, REF(TxInUndoDeserializer(&prevout)));
         }
     }
 };
