@@ -67,7 +67,7 @@ public:
     template <typename Stream>
     void Unserialize(Stream& s) {
         // TODO: avoid reimplementing vector deserializer
-        uint64_t count;
+        uint64_t count = 0;
         ::Unserialize(s, COMPACTSIZE(count));
         if (count > 111111) { // TODO: avoid hardcoding max txouts per tx
             throw std::ios_base::failure("Too many input undo records");
