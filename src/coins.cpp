@@ -238,10 +238,12 @@ bool CCoinsViewCache::HaveInputs(const CTransaction& tx) const
     return true;
 }
 
+static const size_t MAX_OUTPUTS_PER_BLOCK = MAX_BLOCK_BASE_SIZE /  ::GetSerializeSize(CTxOut(), SER_NETWORK, PROTOCOL_VERSION); // TODO: merge with similar definition in undo.h.
+
 const Coin& AccessByTxid(const CCoinsViewCache& view, const uint256& txid)
 {
     COutPoint iter(txid, 0);
-    while (iter.n * ::GetSerializeSize(CTxOut(), SER_NETWORK, PROTOCOL_VERSION) < MAX_BLOCK_BASE_SIZE) {
+    while (iter.n < MAX_OUTPUTS_PER_BLOCK) {
         const Coin& alternate = view.AccessCoin(iter);
         if (!alternate.IsPruned()) return alternate;
         ++iter.n;
