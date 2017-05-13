@@ -843,7 +843,7 @@ UniValue sendrawtransaction(const JSONRPCRequest& request)
     bool fHaveChain = false;
     for (size_t o = 0; !fHaveChain && o < tx->vout.size(); o++) {
         const Coin& existingCoin = view.AccessCoin(COutPoint(hashTx, o));
-        fHaveChain = !existingCoin.IsPruned() && existingCoin.nHeight < 1000000000;
+        fHaveChain = !existingCoin.IsPruned();
     }
     bool fHaveMempool = mempool.exists(hashTx);
     if (!fHaveMempool && !fHaveChain) {
