@@ -282,6 +282,9 @@ private:
 };
 
 //! Utility function to add all of a transaction's outputs to a cache.
+// It assumes that overwrites are only possible for coinbase transactions,
+// TODO: pass in a boolean to limit these possible overwrites to pre-BIP34
+// coinbases.
 void AddCoins(CCoinsViewCache& cache, const CTransaction& tx, int nHeight);
 
 //! Utility function to find any unspent output with a given txid.
