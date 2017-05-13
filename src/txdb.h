@@ -73,11 +73,11 @@ protected:
 public:
     CCoinsViewDB(size_t nCacheSize, bool fMemory = false, bool fWipe = false);
 
-    bool GetCoins(const COutPoint &outpoint, Coin &coin) const;
-    bool HaveCoins(const COutPoint &outpoint) const;
-    uint256 GetBestBlock() const;
-    bool BatchWrite(CCoinsMap &mapCoins, const uint256 &hashBlock);
-    CCoinsViewCursor *Cursor() const;
+    bool GetCoins(const COutPoint &outpoint, Coin &coin) const override;
+    bool HaveCoins(const COutPoint &outpoint) const override;
+    uint256 GetBestBlock() const override;
+    bool BatchWrite(CCoinsMap &mapCoins, const uint256 &hashBlock) override;
+    CCoinsViewCursor *Cursor() const override;
 
     bool Upgrade();
     size_t EstimateSize() const override;
