@@ -912,7 +912,8 @@ bool static AlreadyHave(const CInv& inv) EXCLUSIVE_LOCKS_REQUIRED(cs_main)
 
             return recentRejects->contains(inv.hash) ||
                    mempool.exists(inv.hash) ||
-                   mapOrphanTransactions.count(inv.hash);
+                   mapOrphanTransactions.count(inv.hash) ||
+                   pcoinsTip->HaveCoinsInCache(COutPoint(inv.hash, 0)); // Best effort: only try output 0
         }
     case MSG_BLOCK:
     case MSG_WITNESS_BLOCK:
