@@ -170,6 +170,7 @@ void WalletModel::updateTransaction()
 {
     // Balance and number of transactions might have changed
     fForceCheckBalanceChanged = true;
+    printf("fForceCheckBalanceChanged balance\n");
 }
 
 void WalletModel::updateAddressBook(const QString &address, const QString &label,

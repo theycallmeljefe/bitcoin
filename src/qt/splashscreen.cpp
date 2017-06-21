@@ -131,11 +131,22 @@ SplashScreen::SplashScreen(Qt::WindowFlags f, const NetworkStyle *networkStyle) 
     move(QApplication::desktop()->screenGeometry().center() - r.center());
 
     subscribeToCoreSignals();
+    installEventFilter(this);
 }
 
 SplashScreen::~SplashScreen()
 {
     unsubscribeFromCoreSignals();
+}
+
+bool SplashScreen::eventFilter(QObject * obj, QEvent * ev) {
+    if (ev->type() == QEvent::KeyPress) {
+        QKeyEvent *keyEvent = static_cast<QKeyEvent *>(ev);
+        if(keyEvent->text()[0] == 'c' && continueAction != nullptr) {
+            continueAction();
+        }
+    }
+    return QObject::eventFilter(obj, ev);
 }
 
 void SplashScreen::slotFinish(QWidget *mainWin)
@@ -164,6 +175,18 @@ static void ShowProgress(SplashScreen *splash, const std::string &title, int nPr
     InitMessage(splash, title + strprintf("%d", nProgress) + "%");
 }
 
+void SplashScreen::setContinueAction(const std::function<void(void)> &action)
+{
+    continueAction = action;
+}
+
+static void SetProgressContinueAction(SplashScreen *splash, const std::function<void(void)> &action)
+{
+    QMetaObject::invokeMethod(splash, "setContinueAction",
+        Qt::QueuedConnection,
+        Q_ARG(std::function<void(void)>, action));
+}
+
 #ifdef ENABLE_WALLET
 void SplashScreen::ConnectWallet(CWallet* wallet)
 {
@@ -177,6 +200,7 @@ void SplashScreen::subscribeToCoreSignals()
     // Connect signals to client
     uiInterface.InitMessage.connect(boost::bind(InitMessage, this, _1));
     uiInterface.ShowProgress.connect(boost::bind(ShowProgress, this, _1, _2));
+    uiInterface.SetProgressContinueAction.connect(boost::bind(SetProgressContinueAction, this, _1));
 #ifdef ENABLE_WALLET
     uiInterface.LoadWallet.connect(boost::bind(&SplashScreen::ConnectWallet, this, _1));
 #endif
