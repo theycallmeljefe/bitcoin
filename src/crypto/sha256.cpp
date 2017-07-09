@@ -3,7 +3,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include "crypto/sha256.h"
-
+#include "crypto/sha256_shani.h"
 #include "crypto/common.h"
 
 #include <string.h>
@@ -212,6 +212,7 @@ void CSHA256::SetImplementation(Impl i)
         case Impl::BASIC: sha256::Transform = sha256::TransformBasic; break;
         case Impl::SSE4:  sha256::Transform = sha256_sse4; break;
         case Impl::AVX:   sha256::Transform = sha256_avx; break;
+        case Impl::SHANI: sha256::Transform = sha256_shani; break;
         case Impl::RORX:  sha256::Transform = sha256_rorx; break;
         case Impl::RORX_X8MS: sha256::Transform = sha256_rorx_x8ms; break;
     }

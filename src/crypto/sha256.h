@@ -28,6 +28,7 @@ public:
         BASIC,    //!< Basic C-based implementation
         SSE4,     //!< SSE4 assembly
         AVX,      //!< AVX instructions
+        SHANI,    //!< SHA-NI instructions
         RORX,     //!< RORX instruction
         RORX_X8MS //!< RORX 64-bit wide
     };

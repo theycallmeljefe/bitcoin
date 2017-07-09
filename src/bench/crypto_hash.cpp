@@ -66,6 +66,16 @@ static void SHA256_avx(benchmark::State& state)
     CSHA256::SetImplementation(CSHA256::Impl::BASIC);
 }
 
+static void SHA256_shani(benchmark::State& state)
+{
+    CSHA256::SetImplementation(CSHA256::Impl::SHANI);
+    uint8_t hash[CSHA256::OUTPUT_SIZE];
+    std::vector<uint8_t> in(BUFFER_SIZE,0);
+    while (state.KeepRunning())
+        CSHA256().Write(in.data(), in.size()).Finalize(hash);
+    CSHA256::SetImplementation(CSHA256::Impl::BASIC);
+}
+
 static void SHA256_rorx(benchmark::State& state)
 {
     CSHA256::SetImplementation(CSHA256::Impl::RORX);
@@ -141,6 +151,7 @@ BENCHMARK(SHA1);
 BENCHMARK(SHA256_basic);
 BENCHMARK(SHA256_sse4);
 BENCHMARK(SHA256_avx);
+BENCHMARK(SHA256_shani);
 #ifdef BENCH_RORX
 BENCHMARK(SHA256_rorx);
 BENCHMARK(SHA256_rorx_x8ms);
