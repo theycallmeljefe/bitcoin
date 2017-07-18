@@ -8,12 +8,14 @@
 #include <stdint.h>
 #include <stdlib.h>
 
+#define SHA256_MULTIBUFFER 1
+
 /** A hasher class for SHA-256. */
 class CSHA256
 {
 private:
     uint32_t s[8];
-    unsigned char buf[64];
+    unsigned char buf[64 * SHA256_MULTIBUFFER];
     uint64_t bytes;
 
 public:

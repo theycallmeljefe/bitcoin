@@ -156,23 +156,27 @@ CSHA256::CSHA256() : bytes(0)
     sha256::Initialize(s);
 }
 
+constexpr size_t SHA256_BUFSIZE = 64 * SHA256_MULTIBUFFER;
+
 CSHA256& CSHA256::Write(const unsigned char* data, size_t len)
 {
     const unsigned char* end = data + len;
-    size_t bufsize = bytes % 64;
-    if (bufsize && bufsize + len >= 64) {
+    size_t bufsize = bytes % SHA256_BUFSIZE;
+    if (bufsize && bufsize + len >= SHA256_BUFSIZE) {
         // Fill the buffer, and process it.
-        memcpy(buf + bufsize, data, 64 - bufsize);
-        bytes += 64 - bufsize;
-        data += 64 - bufsize;
-        sha256::Transform(buf, s, 1);
+        memcpy(buf + bufsize, data, SHA256_BUFSIZE - bufsize);
+        bytes += SHA256_BUFSIZE - bufsize;
+        data += SHA256_BUFSIZE - bufsize;
+        sha256::Transform(buf, s, SHA256_MULTIBUFFER);
         bufsize = 0;
     }
     // Process full chunks directly from the source.
-    uint64_t blks = (end - data) / 64;
-    sha256::Transform(data, s, blks);
-    data += blks * 64;
-    bytes += blks * 64;
+    uint64_t blks = (end - data) / SHA256_BUFSIZE;
+    if (blks) {
+        sha256::Transform(data, s, blks * SHA256_MULTIBUFFER);
+        data += blks * SHA256_BUFSIZE;
+        bytes += blks * SHA256_BUFSIZE;
+    }
 
     if (end > data) {
         // Fill the buffer with what remains.
@@ -189,6 +193,9 @@ void CSHA256::Finalize(unsigned char hash[OUTPUT_SIZE])
     WriteBE64(sizedesc, bytes << 3);
     Write(pad, 1 + ((119 - (bytes % 64)) % 64));
     Write(sizedesc, 8);
+    if (bytes % SHA256_BUFSIZE) {
+        sha256::Transform(buf, s, (bytes % SHA256_BUFSIZE) / 64);
+    }
     WriteBE32(hash, s[0]);
     WriteBE32(hash + 4, s[1]);
     WriteBE32(hash + 8, s[2]);
