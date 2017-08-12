@@ -2206,6 +2206,8 @@ bool static ProcessMessage(CNode* pfrom, const std::string& strCommand, CDataStr
                 // BIP 152 permits peers to relay compact blocks after validating
                 // the header only; we should not punish peers if the block turns
                 // out to be invalid.
+                auto find = mapBlockIndex.find(resp.blockhash);
+                assert(find == mapBlockIndex.end() || !chainActive.Contains(find->second));
                 mapBlockSource.emplace(resp.blockhash, std::make_pair(pfrom->GetId(), false));
             }
         } // Don't hold cs_main when we call into ProcessNewBlock
