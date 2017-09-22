@@ -1106,6 +1106,11 @@ public:
        caller must ensure the current wallet version is correct before calling
        this function). */
     bool SetHDMasterKey(const CPubKey& key);
+
+    /* Check whether we know how to sign for an output like this, assuming we
+     * have all private keys. This is unrelated to whether we consider this
+     * output to be ours. */
+    bool IsSolvable(const CScript& script) const;
 };
 
 /** A key allocated from the key pool. */
