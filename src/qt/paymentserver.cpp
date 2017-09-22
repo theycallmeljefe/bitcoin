@@ -646,10 +646,10 @@ void PaymentServer::fetchPaymentACK(CWallet* wallet, const SendCoinsRecipient& r
     else {
         CPubKey newKey;
         if (wallet->GetKeyFromPool(newKey)) {
-            CKeyID keyID = newKey.GetID();
-            wallet->SetAddressBook(keyID, strAccount, "refund");
+            CTxDestination dest = wallet->GetDestinationForKey(newKey, address_style);
+            wallet->SetAddressBook(dest, strAccount, "refund");
 
-            CScript s = GetScriptForDestination(keyID);
+            CScript s = GetScriptForDestination(dest);
             payments::Output* refund_to = payment.add_refund_to();
             refund_to->set_script(&s[0], s.size());
         }

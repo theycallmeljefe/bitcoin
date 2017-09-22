@@ -43,6 +43,8 @@ CFeeRate payTxFee(DEFAULT_TRANSACTION_FEE);
 unsigned int nTxConfirmTarget = DEFAULT_TX_CONFIRM_TARGET;
 bool bSpendZeroConfChange = DEFAULT_SPEND_ZEROCONF_CHANGE;
 bool fWalletRbf = DEFAULT_WALLET_RBF;
+OutputStyle address_style = STYLE_P2SH;
+OutputStyle change_style = STYLE_P2SH;
 
 const char * DEFAULT_WALLET_DAT = "wallet.dat";
 const uint32_t BIP32_HARDENED_KEY_LIMIT = 0x80000000;
@@ -823,7 +825,7 @@ bool CWallet::GetAccountPubkey(CPubKey &pubKey, std::string strAccount, bool bFo
             bForceNew = true;
         else {
             // Check if the current key has been used
-            CScript scriptPubKey = GetScriptForDestination(account.vchPubKey.GetID());
+            CScript scriptPubKey = GetScriptForDestination(GetDestinationForKey(account.vchPubKey, address_style));
             for (std::map<uint256, CWalletTx>::iterator it = mapWallet.begin();
                  it != mapWallet.end() && account.vchPubKey.IsValid();
                  ++it)
@@ -840,7 +842,7 @@ bool CWallet::GetAccountPubkey(CPubKey &pubKey, std::string strAccount, bool bFo
         if (!GetKeyFromPool(account.vchPubKey, false))
             return false;
 
-        SetAddressBook(account.vchPubKey.GetID(), strAccount, "receive");
+        SetAddressBook(GetDestinationForKey(account.vchPubKey, address_style), strAccount, "receive");
         walletdb.WriteAccount(strAccount, account);
     }
 
@@ -2667,7 +2669,7 @@ bool CWallet::CreateTransaction(const std::vector<CRecipient>& vecSend, CWalletT
                     return false;
                 }
 
-                scriptChange = GetScriptForDestination(vchPubKey.GetID());
+                scriptChange = GetScriptForDestination(GetDestinationForKey(vchPubKey, change_style));
             }
             CTxOut change_prototype_txout(0, scriptChange);
             size_t change_prototype_size = GetSerializeSize(change_prototype_txout, SER_DISK, 0);
@@ -3227,6 +3229,7 @@ bool CWallet::TopUpKeyPool(unsigned int kpSize)
             if (!walletdb.WritePool(index, CKeyPool(pubkey, internal))) {
                 throw std::runtime_error(std::string(__func__) + ": writing generated key failed");
             }
+            RecoverKey(pubkey);
 
             if (internal) {
                 setInternalKeyPool.insert(index);
@@ -4050,4 +4053,85 @@ bool CWallet::IsSolvable(const CScript& script) const
     DummySignatureCreator creator(this);
     SignatureData sigs;
     return (ProduceSignature(creator, script, sigs) && VerifyScript(sigs.scriptSig, script, &sigs.scriptWitness, MANDATORY_SCRIPT_VERIFY_FLAGS | SCRIPT_VERIFY_WITNESS_PUBKEYTYPE, creator.Checker()));
+}
+
+static const std::string STYLE_STRING_NONE = "";
+static const std::string STYLE_STRING_LEGACY = "legacy";
+static const std::string STYLE_STRING_P2SH = "p2sh";
+static const std::string STYLE_STRING_SEGWIT = "segwit";
+
+OutputStyle ParseStyle(const std::string& style)
+{
+    if (style == STYLE_STRING_LEGACY) {
+        return STYLE_LEGACY;
+    } else if (style == STYLE_STRING_P2SH || style == "default") {
+        return STYLE_P2SH;
+    } else if (style == STYLE_STRING_SEGWIT) {
+        return STYLE_SEGWIT;
+    } else {
+        return STYLE_NONE;
+    }
+}
+
+
+const std::string& FormatStyle(OutputStyle style)
+{
+    switch (style) {
+    case STYLE_LEGACY: return STYLE_STRING_LEGACY;
+    case STYLE_P2SH: return STYLE_STRING_P2SH;
+    case STYLE_SEGWIT: return STYLE_STRING_SEGWIT;
+    default: assert(false);
+    }
+}
+
+CTxDestination CWallet::GetDestinationForKey(const CPubKey& key, OutputStyle style)
+{
+    switch (style) {
+    case STYLE_LEGACY: return key.GetID();
+    case STYLE_P2SH:
+    case STYLE_SEGWIT: {
+        CTxDestination witdest = WitnessV0KeyHash(key.GetID());
+        CScript witprog = GetScriptForDestination(witdest);
+        // Check if the resulting program is solvable (i.e. doesn't use an uncompressed key)
+        if (!IsSolvable(witprog)) return key.GetID();
+        // Usually done when generating, through RecoverKey, but for pre-existing keypool keys this is still needed
+        AddCScript(witprog);
+        if (style == STYLE_P2SH) {
+            return CScriptID(witprog);
+        } else {
+            return witdest;
+        }
+    }
+    default: assert(false);
+    }
+}
+
+CTxDestination CWallet::GetDestinationForScript(const CScript& script, OutputStyle style)
+{
+    switch (style) {
+    case STYLE_LEGACY:
+    case STYLE_P2SH:
+        return CScriptID(script);
+    case STYLE_SEGWIT: {
+        CTxDestination witdest = WitnessV0ScriptHash(Hash(script.begin(), script.end()));
+        CScript witprog = GetScriptForDestination(witdest);
+        // Check if the resulting program is solvable (i.e. doesn't use an uncompressed key)
+        if (!IsSolvable(witprog)) return CScriptID(script);
+        AddCScript(witprog);
+        return witdest;
+    }
+    default: assert(false);
+    }
+}
+
+void CWallet::RecoverKey(const CPubKey& key)
+{
+    // When recovering, we cannot assume any particular style of addresses,
+    // unless it is an uncompressed key. If not, insert the witness redeemscript.
+    // TODO: use separate derivation chains for different style addresses.
+    if (key.IsCompressed()) {
+        CTxDestination witdest = WitnessV0KeyHash(key.GetID());
+        CScript witprog = GetScriptForDestination(witdest);
+        AddCScript(witprog);
+    }
 }

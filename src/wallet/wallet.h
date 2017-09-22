@@ -99,6 +99,17 @@ enum WalletFeature
     FEATURE_LATEST = FEATURE_COMPRPUBKEY // HD is optional, use FEATURE_COMPRPUBKEY as latest version
 };
 
+enum OutputStyle
+{
+    STYLE_NONE,
+    STYLE_LEGACY,
+    STYLE_P2SH,
+    STYLE_SEGWIT
+};
+
+extern OutputStyle address_style;
+extern OutputStyle change_style;
+
 
 /** A key pool entry */
 class CKeyPool
@@ -1111,6 +1122,10 @@ public:
      * have all private keys. This is unrelated to whether we consider this
      * output to be ours. */
     bool IsSolvable(const CScript& script) const;
+
+    CTxDestination GetDestinationForKey(const CPubKey& key, OutputStyle);
+    CTxDestination GetDestinationForScript(const CScript& script, OutputStyle);
+    void RecoverKey(const CPubKey& key);
 };
 
 /** A key allocated from the key pool. */
@@ -1199,5 +1214,8 @@ bool CWallet::DummySignTx(CMutableTransaction &txNew, const ContainerType &coins
     }
     return true;
 }
+
+OutputStyle ParseStyle(const std::string& str);
+const std::string& FormatStyle(OutputStyle style);
 
 #endif // BITCOIN_WALLET_WALLET_H

@@ -18,6 +18,8 @@ class RawTransactionsTest(BitcoinTestFramework):
     def set_test_params(self):
         self.num_nodes = 4
         self.setup_clean_chain = True
+        # importpubkey is not sufficient to watch witness addresses
+        self.extra_args = [["-addressstyle=legacy"], ["-addressstyle=legacy"], ["-addressstyle=legacy"], ["-addressstyle=legacy"]]
 
     def setup_network(self, split=False):
         self.setup_nodes()

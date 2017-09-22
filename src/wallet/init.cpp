@@ -15,6 +15,8 @@
 std::string GetWalletHelpString(bool showDebug)
 {
     std::string strUsage = HelpMessageGroup(_("Wallet options:"));
+    strUsage += HelpMessageOpt("-addressstyle", _("What style addresses to use (\"legacy\", \"p2sh\", \"segwit\")"));
+    strUsage += HelpMessageOpt("-changestyle", _("What style change to use (\"legacy\", \"p2sh\", \"segwit\")"));
     strUsage += HelpMessageOpt("-disablewallet", _("Do not load the wallet and disable wallet RPC calls"));
     strUsage += HelpMessageOpt("-keypool=<n>", strprintf(_("Set key pool size to <n> (default: %u)"), DEFAULT_KEYPOOL_SIZE));
     strUsage += HelpMessageOpt("-fallbackfee=<amt>", strprintf(_("A fee rate (in %s/kB) that will be used when fee estimation has insufficient data (default: %s)"),
@@ -167,6 +169,22 @@ bool WalletParameterInteraction()
     nTxConfirmTarget = gArgs.GetArg("-txconfirmtarget", DEFAULT_TX_CONFIRM_TARGET);
     bSpendZeroConfChange = gArgs.GetBoolArg("-spendzeroconfchange", DEFAULT_SPEND_ZEROCONF_CHANGE);
     fWalletRbf = gArgs.GetBoolArg("-walletrbf", DEFAULT_WALLET_RBF);
+
+    std::string style = gArgs.GetArg("-addressstyle", "default");
+    OutputStyle parsed_style = ParseStyle(style);
+    if (parsed_style == STYLE_NONE) {
+        return InitError(strprintf(_("Unknown address style '%s'"), style));
+    } else {
+        address_style = parsed_style;
+    }
+
+    style = gArgs.GetArg("-changestyle", style);
+    parsed_style = ParseStyle(style);
+    if (parsed_style == STYLE_NONE) {
+        return InitError(strprintf(_("Unknown change style '%s'"), style));
+    } else {
+        change_style = parsed_style;
+    }
 
     return true;
 }

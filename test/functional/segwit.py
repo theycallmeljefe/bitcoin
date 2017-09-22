@@ -116,13 +116,13 @@ class SegWitTest(BitcoinTestFramework):
         assert('weightlimit' not in tmpl)
         assert(tmpl['sigoplimit'] == 20000)
         assert(tmpl['transactions'][0]['hash'] == txid)
-        assert(tmpl['transactions'][0]['sigops'] == 2)
+        assert(tmpl['transactions'][0]['sigops'] == 0)
         tmpl = self.nodes[0].getblocktemplate({'rules':['segwit']})
         assert(tmpl['sizelimit'] == 1000000)
         assert('weightlimit' not in tmpl)
         assert(tmpl['sigoplimit'] == 20000)
         assert(tmpl['transactions'][0]['hash'] == txid)
-        assert(tmpl['transactions'][0]['sigops'] == 2)
+        assert(tmpl['transactions'][0]['sigops'] == 0)
         self.nodes[0].generate(1) #block 162
 
         balance_presetup = self.nodes[0].getbalance()

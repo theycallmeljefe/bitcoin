@@ -154,7 +154,7 @@ void TestSendCoins()
     wallet.LoadWallet(firstRun);
     {
         LOCK(wallet.cs_wallet);
-        wallet.SetAddressBook(test.coinbaseKey.GetPubKey().GetID(), "", "receive");
+        wallet.SetAddressBook(wallet.GetDestinationForKey(test.coinbaseKey.GetPubKey(), address_style), "", "receive");
         wallet.AddKeyPubKey(test.coinbaseKey, test.coinbaseKey.GetPubKey());
     }
     wallet.ScanForWalletTransactions(chainActive.Genesis(), true);
