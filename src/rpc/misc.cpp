@@ -47,6 +47,7 @@ public:
         CPubKey vchPubKey;
         obj.push_back(Pair("isscript", false));
         obj.push_back(Pair("iswitness", false));
+        obj.push_back(Pair("keyhash", HexStr(keyID)));
         if (pwallet && pwallet->GetPubKey(keyID, vchPubKey)) {
             obj.push_back(Pair("pubkey", HexStr(vchPubKey)));
             obj.push_back(Pair("iscompressed", vchPubKey.IsCompressed()));
@@ -67,6 +68,16 @@ public:
             obj.push_back(Pair("script", GetTxnOutputType(whichType)));
             obj.push_back(Pair("hex", HexStr(subscript.begin(), subscript.end())));
             UniValue a(UniValue::VARR);
+            if (whichType == TX_WITNESS_V0_KEYHASH || whichType == TX_WITNESS_V0_SCRIPTHASH) {
+                UniValue subobj = boost::apply_visitor(*this, addresses[0]);
+                obj.push_back(Pair("embedded", std::move(subobj)));
+                if (subobj.exists("pubkey")) {
+                    obj.push_back(Pair("pubkey", subobj["pubkey"].get_str()));
+                }
+                if (subobj.exists("keyhash")) {
+                    obj.push_back(Pair("keyhash", subobj["keyhash"].get_str()));
+                }
+            }
             for (const CTxDestination& addr : addresses) {
                 a.push_back(EncodeDestination(addr));
             }
@@ -85,6 +96,7 @@ public:
         obj.push_back(Pair("iswitness", true));
         obj.push_back(Pair("witness_version", 0));
         obj.push_back(Pair("witness_program", HexStr(id.begin(), id.end())));
+        obj.push_back(Pair("keyhash", HexStr(id.begin(), id.end())));
         if (pwallet && pwallet->GetPubKey(CKeyID(id), pubkey)) {
             obj.push_back(Pair("pubkey", HexStr(pubkey)));
         }
@@ -188,8 +200,11 @@ UniValue validateaddress(const JSONRPCRequest& request)
         }
         if (pwallet) {
             const auto& meta = pwallet->mapKeyMetadata;
-            const CKeyID *keyID = boost::get<CKeyID>(&dest);
-            auto it = keyID ? meta.find(*keyID) : meta.end();
+            std::map<CTxDestination, CKeyMetadata>::const_iterator it = meta.end();
+            if (detail.exists("keyhash")) {
+                uint160 keyhash(ParseHex(detail["keyhash"].get_str()));
+                it = meta.find(CKeyID(keyhash));
+            }
             if (it == meta.end()) {
                 it = meta.find(CScriptID(scriptPubKey));
             }
