@@ -493,10 +493,10 @@ class CTransaction(object):
         r += struct.pack("<I", self.nLockTime)
         return r
 
-    # Regular serialization is without witness -- must explicitly
-    # call serialize_with_witness to include witness data.
+    # Regular serialization is with witness -- must explicitly
+    # call serialize_without_witness to exclude witness data.
     def serialize(self):
-        return self.serialize_without_witness()
+        return self.serialize_with_witness()
 
     # Recalculate the txid (transaction hash without witness)
     def rehash(self):
@@ -512,7 +512,7 @@ class CTransaction(object):
 
         if self.sha256 is None:
             self.sha256 = uint256_from_str(hash256(self.serialize_without_witness()))
-        self.hash = encode(hash256(self.serialize())[::-1], 'hex_codec').decode('ascii')
+        self.hash = encode(hash256(self.serialize_without_witness())[::-1], 'hex_codec').decode('ascii')
 
     def is_valid(self):
         self.calc_sha256()
@@ -603,13 +603,13 @@ class CBlock(CBlockHeader):
         super(CBlock, self).deserialize(f)
         self.vtx = deser_vector(f, CTransaction)
 
-    def serialize(self, with_witness=False):
+    def serialize(self, with_witness=True):
         r = b""
         r += super(CBlock, self).serialize()
         if with_witness:
             r += ser_vector(self.vtx, "serialize_with_witness")
         else:
-            r += ser_vector(self.vtx)
+            r += ser_vector(self.vtx, "serialize_without_witness")
         return r
 
     # Calculate the merkle root given a vector of transaction hashes
@@ -751,7 +751,7 @@ class PrefilledTransaction(object):
         self.tx = CTransaction()
         self.tx.deserialize(f)
 
-    def serialize(self, with_witness=False):
+    def serialize(self, with_witness=True):
         r = b""
         r += ser_compact_size(self.index)
         if with_witness:
@@ -759,6 +759,9 @@ class PrefilledTransaction(object):
         else:
             r += self.tx.serialize_without_witness()
         return r
+
+    def serialize_without_witness(self):
+        return self.serialize(with_witness=False)
 
     def serialize_with_witness(self):
         return self.serialize(with_witness=True)
@@ -799,7 +802,7 @@ class P2PHeaderAndShortIDs(object):
         if with_witness:
             r += ser_vector(self.prefilled_txn, "serialize_with_witness")
         else:
-            r += ser_vector(self.prefilled_txn)
+            r += ser_vector(self.prefilled_txn, "serialize_without_witness")
         return r
 
     def __repr__(self):
@@ -930,13 +933,13 @@ class BlockTransactions(object):
         self.blockhash = deser_uint256(f)
         self.transactions = deser_vector(f, CTransaction)
 
-    def serialize(self, with_witness=False):
+    def serialize(self, with_witness=True):
         r = b""
         r += ser_uint256(self.blockhash)
         if with_witness:
             r += ser_vector(self.transactions, "serialize_with_witness")
         else:
-            r += ser_vector(self.transactions)
+            r += ser_vector(self.transactions, "serialize_without_witness")
         return r
 
     def __repr__(self):
@@ -1155,7 +1158,7 @@ class msg_block(object):
         self.block.deserialize(f)
 
     def serialize(self):
-        return self.block.serialize()
+        return self.block.serialize(with_witness=False)
 
     def __repr__(self):
         return "msg_block(block=%s)" % (repr(self.block))
@@ -1442,7 +1445,7 @@ class msg_blocktxn(object):
 
     def serialize(self):
         r = b""
-        r += self.block_transactions.serialize()
+        r += self.block_transactions.serialize(with_witness=False)
         return r
 
     def __repr__(self):
