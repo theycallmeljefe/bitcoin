@@ -7,6 +7,7 @@
 #include "crypto/hmac_sha512.h"
 #include "pubkey.h"
 
+#include <x86intrin.h>
 
 inline uint32_t ROTL32(uint32_t x, int8_t r)
 {
@@ -81,6 +82,8 @@ void BIP32Hash(const ChainCode &chainCode, unsigned int nChild, unsigned char he
 
 #define ROTL(x, b) (uint64_t)(((x) << (b)) | ((x) >> (64 - (b))))
 
+#define ROTLX4(x, b) (_mm256_or_si256(_mm256_slli_epi64(x, b), _mm256_srli_epi64(x, (64 - (b)))))
+
 #define SIPROUND do { \
     v0 += v1; v1 = ROTL(v1, 13); v1 ^= v0; \
     v0 = ROTL(v0, 32); \
@@ -88,6 +91,15 @@ void BIP32Hash(const ChainCode &chainCode, unsigned int nChild, unsigned char he
     v0 += v3; v3 = ROTL(v3, 21); v3 ^= v0; \
     v2 += v1; v1 = ROTL(v1, 17); v1 ^= v2; \
     v2 = ROTL(v2, 32); \
+} while (0)
+
+#define SIPROUNDX4 do { \
+    v0 = _mm256_add_epi64(v0, v1); v1 = ROTLX4(v1, 13); v1 = _mm256_xor_si256(v1, v0); \
+    v0 = ROTLX4(v0, 32); \
+    v2 = _mm256_add_epi64(v2, v3); v3 = ROTLX4(v3, 16); v3 = _mm256_xor_si256(v3, v2); \
+    v0 = _mm256_add_epi64(v0, v3); v3 = ROTLX4(v3, 21); v3 = _mm256_xor_si256(v3, v0); \
+    v2 = _mm256_add_epi64(v2, v1); v1 = ROTLX4(v1, 17); v1 = _mm256_xor_si256(v1, v2); \
+    v2 = ROTLX4(v2, 32); \
 } while (0)
 
 CSipHasher::CSipHasher(uint64_t k0, uint64_t k1)
@@ -205,6 +217,61 @@ uint64_t SipHashUint256(uint64_t k0, uint64_t k1, const uint256& val)
     SIPROUND;
     return v0 ^ v1 ^ v2 ^ v3;
 }
+
+void SipHashUint256X4(uint64_t k0, uint64_t k1, uint64_t* out, const uint256* in)
+{
+    out[0] = SipHashUint256(k0, k1, in[0]);
+    out[1] = SipHashUint256(k0, k1, in[1]);
+    out[2] = SipHashUint256(k0, k1, in[2]);
+    out[3] = SipHashUint256(k0, k1, in[3]);
+}
+
+/*
+__attribute__((target("avx2")))
+void SipHashUint256X4(uint64_t k0, uint64_t k1, uint64_t* out, const uint256* in)
+{
+    __m256i d = _mm256_set_epi64x(in[0].GetUint64(0), in[1].GetUint64(0), in[2].GetUint64(0), in[3].GetUint64(0));
+
+    __m256i v0 = _mm256_set1_epi64x(0x736f6d6570736575ULL ^ k0);
+    __m256i v1 = _mm256_set1_epi64x(0x646f72616e646f6dULL ^ k1);
+    __m256i v2 = _mm256_set1_epi64x(0x6c7967656e657261ULL ^ k0);
+    __m256i v3 = _mm256_xor_si256(_mm256_set1_epi64x(0x7465646279746573ULL ^ k1), d);
+
+    SIPROUNDX4;
+    SIPROUNDX4;
+    v0 = _mm256_xor_si256(v0, d);
+    d = _mm256_set_epi64x(in[0].GetUint64(1), in[1].GetUint64(1), in[2].GetUint64(1), in[3].GetUint64(1));
+    v3 = _mm256_xor_si256(v3, d);
+    SIPROUNDX4;
+    SIPROUNDX4;
+    v0 = _mm256_xor_si256(v0, d);
+    d = _mm256_set_epi64x(in[0].GetUint64(2), in[1].GetUint64(2), in[2].GetUint64(2), in[3].GetUint64(2));
+    v3 = _mm256_xor_si256(v3, d);
+    SIPROUNDX4;
+    SIPROUNDX4;
+    v0 = _mm256_xor_si256(v0, d);
+    d = _mm256_set_epi64x(in[0].GetUint64(3), in[1].GetUint64(3), in[2].GetUint64(3), in[3].GetUint64(3));
+    v3 = _mm256_xor_si256(v3, d);
+    SIPROUNDX4;
+    SIPROUNDX4;
+    v0 = _mm256_xor_si256(v0, d);
+    v3 = _mm256_xor_si256(v3, _mm256_set1_epi64x(((uint64_t)4) << 59));
+    SIPROUNDX4;
+    SIPROUNDX4;
+    v0 = _mm256_xor_si256(v0, _mm256_set1_epi64x(((uint64_t)4) << 59));
+    v2 = _mm256_xor_si256(v2, _mm256_set1_epi64x(0xFF));
+    SIPROUNDX4;
+    SIPROUNDX4;
+    SIPROUNDX4;
+    SIPROUNDX4;
+
+    __m256i r = _mm256_xor_si256(_mm256_xor_si256(v0, v1), _mm256_xor_si256(v2, v3));
+    out[0] = _mm256_extract_epi64(r, 3);
+    out[1] = _mm256_extract_epi64(r, 2);
+    out[2] = _mm256_extract_epi64(r, 1);
+    out[3] = _mm256_extract_epi64(r, 0);
+}
+*/
 
 uint64_t SipHashUint256Extra(uint64_t k0, uint64_t k1, const uint256& val, uint32_t extra)
 {

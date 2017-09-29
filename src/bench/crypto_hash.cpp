@@ -70,6 +70,18 @@ static void SipHash_32b(benchmark::State& state)
     }
 }
 
+static void QuadSipHash_32b(benchmark::State& state)
+{
+    uint256 x[4];
+    while (state.KeepRunning()) {
+        for (int i = 0; i < 1000000; i++) {
+            uint64_t o[4];
+            SipHashUint256X4(0, i, o, x);
+            memcpy(x, o, sizeof(o));
+        }
+    }
+}
+
 static void FastRandom_32bit(benchmark::State& state)
 {
     FastRandomContext rng(true);
@@ -99,5 +111,6 @@ BENCHMARK(SHA512);
 
 BENCHMARK(SHA256_32b);
 BENCHMARK(SipHash_32b);
+BENCHMARK(QuadSipHash_32b);
 BENCHMARK(FastRandom_32bit);
 BENCHMARK(FastRandom_1bit);

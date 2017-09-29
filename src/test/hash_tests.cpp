@@ -147,4 +147,24 @@ BOOST_AUTO_TEST_CASE(siphash)
     }
 }
 
+BOOST_AUTO_TEST_CASE(siphash4x)
+{
+    for (int i = 0; i < 10; ++i) {
+        uint64_t k0 = InsecureRandBits(64);
+        uint64_t k1 = InsecureRandBits(64);
+        uint256 in[4];
+        uint64_t out1[4], out2[4];
+        in[0] = InsecureRand256();
+        in[1] = InsecureRand256();
+        in[2] = InsecureRand256();
+        in[3] = InsecureRand256();
+        out1[0] = SipHashUint256(k0, k1, in[0]);
+        out1[1] = SipHashUint256(k0, k1, in[1]);
+        out1[2] = SipHashUint256(k0, k1, in[2]);
+        out1[3] = SipHashUint256(k0, k1, in[3]);
+        SipHashUint256X4(k0, k1, out2, in);
+        BOOST_CHECK(memcmp(out1, out2, sizeof(out1)) == 0);
+    }
+}
+
 BOOST_AUTO_TEST_SUITE_END()

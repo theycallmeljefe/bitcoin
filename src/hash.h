@@ -229,4 +229,6 @@ public:
 uint64_t SipHashUint256(uint64_t k0, uint64_t k1, const uint256& val);
 uint64_t SipHashUint256Extra(uint64_t k0, uint64_t k1, const uint256& val, uint32_t extra);
 
+void SipHashUint256X4(uint64_t k0, uint64_t k1, uint64_t* out, const uint256* in);
+
 #endif // BITCOIN_HASH_H
