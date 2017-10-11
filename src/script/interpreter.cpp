@@ -15,6 +15,8 @@
 
 typedef std::vector<unsigned char> valtype;
 
+std::atomic<int64_t> total_sigbytes{0};
+
 namespace {
 
 inline bool set_success(ScriptError* ret)
@@ -898,6 +900,9 @@ bool EvalScript(std::vector<std::vector<unsigned char> >& stack, const CScript& 
                         return false;
                     }
                     bool fSuccess = checker.CheckSig(vchSig, vchPubKey, scriptCode, sigversion);
+                    if (fSuccess && (flags & SCRIPT_ACCOUNTING)) {
+                        total_sigbytes += vchSig.size();
+                    }
 
                     if (!fSuccess && (flags & SCRIPT_VERIFY_NULLFAIL) && vchSig.size())
                         return set_error(serror, SCRIPT_ERR_SIG_NULLFAIL);
@@ -958,6 +963,7 @@ bool EvalScript(std::vector<std::vector<unsigned char> >& stack, const CScript& 
                         }
                     }
 
+                    int64_t sigsize = 0;
                     bool fSuccess = true;
                     while (fSuccess && nSigsCount > 0)
                     {
@@ -974,6 +980,7 @@ bool EvalScript(std::vector<std::vector<unsigned char> >& stack, const CScript& 
 
                         // Check signature
                         bool fOk = checker.CheckSig(vchSig, vchPubKey, scriptCode, sigversion);
+                        sigsize += vchSig.size();
 
                         if (fOk) {
                             isig++;
@@ -1019,6 +1026,9 @@ bool EvalScript(std::vector<std::vector<unsigned char> >& stack, const CScript& 
                             popstack(stack);
                         else
                             return set_error(serror, SCRIPT_ERR_CHECKMULTISIGVERIFY);
+                    }
+                    if (fSuccess && (flags & SCRIPT_ACCOUNTING)) {
+                        total_sigbytes += sigsize;
                     }
                 }
                 break;
@@ -1253,21 +1263,21 @@ bool TransactionSignatureChecker::VerifySignature(const std::vector<unsigned cha
 
 bool TransactionSignatureChecker::CheckSig(const std::vector<unsigned char>& vchSigIn, const std::vector<unsigned char>& vchPubKey, const CScript& scriptCode, SigVersion sigversion) const
 {
-    CPubKey pubkey(vchPubKey);
-    if (!pubkey.IsValid())
-        return false;
+//    CPubKey pubkey(vchPubKey);
+//    if (!pubkey.IsValid())
+//        return false;
 
     // Hash type is one byte tacked on to the end of the signature
-    std::vector<unsigned char> vchSig(vchSigIn);
-    if (vchSig.empty())
+//    std::vector<unsigned char> vchSig(vchSigIn);
+    if (vchSigIn.empty())
         return false;
-    int nHashType = vchSig.back();
-    vchSig.pop_back();
+//    int nHashType = vchSig.back();
+//    vchSig.pop_back();
 
-    uint256 sighash = SignatureHash(scriptCode, *txTo, nIn, nHashType, amount, sigversion, this->txdata);
-
-    if (!VerifySignature(vchSig, pubkey, sighash))
-        return false;
+//    uint256 sighash = SignatureHash(scriptCode, *txTo, nIn, nHashType, amount, sigversion, this->txdata);
+//
+//    if (!VerifySignature(vchSig, pubkey, sighash))
+//        return false;
 
     return true;
 }

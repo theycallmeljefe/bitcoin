@@ -12,6 +12,7 @@
 #include <vector>
 #include <stdint.h>
 #include <string>
+#include <atomic>
 
 class CPubKey;
 class CScript;
@@ -26,6 +27,8 @@ enum
     SIGHASH_SINGLE = 3,
     SIGHASH_ANYONECANPAY = 0x80,
 };
+
+extern std::atomic<int64_t> total_sigbytes;
 
 /** Script verification flags */
 enum
@@ -106,6 +109,8 @@ enum
     // Public keys in segregated witness scripts must be compressed
     //
     SCRIPT_VERIFY_WITNESS_PUBKEYTYPE = (1U << 15),
+
+    SCRIPT_ACCOUNTING = (1U << 16)
 };
 
 bool CheckSignatureEncoding(const std::vector<unsigned char> &vchSig, unsigned int flags, ScriptError* serror);
