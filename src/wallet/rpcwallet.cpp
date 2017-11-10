@@ -2716,6 +2716,7 @@ UniValue listunspent(const JSONRPCRequest& request)
             "      \"maximumAmount\"    (numeric or string, default=unlimited) Maximum value of each UTXO in " + CURRENCY_UNIT + "\n"
             "      \"maximumCount\"     (numeric or string, default=unlimited) Maximum number of UTXOs\n"
             "      \"minimumSumAmount\" (numeric or string, default=unlimited) Minimum sum value of all UTXOs in " + CURRENCY_UNIT + "\n"
+            "      \"includeSpent\"     (bool, default=false) Include spent outputs\n"
             "    }\n"
             "\nResult\n"
             "[                   (array of json object)\n"
@@ -2784,6 +2785,7 @@ UniValue listunspent(const JSONRPCRequest& request)
     CAmount nMinimumAmount = 0;
     CAmount nMaximumAmount = MAX_MONEY;
     CAmount nMinimumSumAmount = MAX_MONEY;
+    bool include_spent = 0;
     uint64_t nMaximumCount = 0;
 
     if (!request.params[4].isNull()) {
@@ -2800,6 +2802,8 @@ UniValue listunspent(const JSONRPCRequest& request)
 
         if (options.exists("maximumCount"))
             nMaximumCount = options["maximumCount"].get_int64();
+
+        if (options.exists("include_spent")) include_spent = options["include_spent"].get_bool();
     }
 
     UniValue results(UniValue::VARR);
@@ -2807,7 +2811,7 @@ UniValue listunspent(const JSONRPCRequest& request)
     assert(pwallet != nullptr);
     LOCK2(cs_main, pwallet->cs_wallet);
 
-    pwallet->AvailableCoins(vecOutputs, !include_unsafe, nullptr, nMinimumAmount, nMaximumAmount, nMinimumSumAmount, nMaximumCount, nMinDepth, nMaxDepth);
+    pwallet->AvailableCoins(vecOutputs, !include_unsafe, nullptr, nMinimumAmount, nMaximumAmount, nMinimumSumAmount, nMaximumCount, nMinDepth, nMaxDepth, include_spent);
     for (const COutput& out : vecOutputs) {
         CTxDestination address;
         const CScript& scriptPubKey = out.tx->tx->vout[out.i].scriptPubKey;

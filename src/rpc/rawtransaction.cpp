@@ -832,6 +832,7 @@ UniValue signrawtransaction(const JSONRPCRequest& request)
         static std::map<std::string, int> mapSigHashValues = {
             {std::string("ALL"), int(SIGHASH_ALL)},
             {std::string("ALL|ANYONECANPAY"), int(SIGHASH_ALL|SIGHASH_ANYONECANPAY)},
+            {std::string("ALL|ABC"), int(SIGHASH_ALL|0x40)},
             {std::string("NONE"), int(SIGHASH_NONE)},
             {std::string("NONE|ANYONECANPAY"), int(SIGHASH_NONE|SIGHASH_ANYONECANPAY)},
             {std::string("SINGLE"), int(SIGHASH_SINGLE)},
