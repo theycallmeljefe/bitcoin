@@ -1,0 +1,8 @@
+include_HEADERS += include/secp256k1_sethash.h
+noinst_HEADERS += src/modules/sethash/main_impl.h
+noinst_HEADERS += src/modules/sethash/tests_impl.h
+if USE_BENCHMARK
+#noinst_PROGRAMS += bench_sethash
+#bench_sethash_SOURCES = src/bench_sethash.c
+#bench_sethash_LDADD = libsecp256k1.la $(SECP_LIBS) $(COMMON_LIB)
+endif

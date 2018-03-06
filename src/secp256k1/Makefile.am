@@ -175,3 +175,7 @@ endif
 if ENABLE_MODULE_RECOVERY
 include src/modules/recovery/Makefile.am.include
 endif
+
+if ENABLE_MODULE_SETHASH
+include src/modules/sethash/Makefile.am.include
+endif

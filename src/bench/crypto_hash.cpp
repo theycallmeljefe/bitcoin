@@ -15,6 +15,8 @@
 #include <crypto/sha256.h>
 #include <crypto/sha512.h>
 
+#include <secp256k1_sethash.h>
+
 /* Number of bytes to hash per iteration */
 static const uint64_t BUFFER_SIZE = 1000*1000;
 
@@ -87,6 +89,19 @@ static void FastRandom_1bit(benchmark::State& state)
     }
 }
 
+static void ECMH(benchmark::State& state)
+{
+    uint256 x;
+    secp256k1_sethash sethash;
+    secp256k1_sethash_init(NULL, &sethash);
+    while (state.KeepRunning()) {
+        for (int i = 0; i < 1000; ++i) {
+            CSHA256().Write(x.begin(), 32).Finalize(x.begin());
+            secp256k1_sethash_update(NULL, &sethash, x.begin(), 0);
+        }
+    }
+}
+
 BENCHMARK(RIPEMD160, 440);
 BENCHMARK(SHA1, 570);
 BENCHMARK(SHA256, 340);
@@ -96,3 +111,5 @@ BENCHMARK(SHA256_32b, 4700 * 1000);
 BENCHMARK(SipHash_32b, 40 * 1000 * 1000);
 BENCHMARK(FastRandom_32bit, 110 * 1000 * 1000);
 BENCHMARK(FastRandom_1bit, 440 * 1000 * 1000);
+
+BENCHMARK(ECMH, 100);

@@ -21,6 +21,17 @@
 #error "Please select field implementation"
 #endif
 
+SECP256K1_INLINE static uint64_t rdtsc(void) {
+    uint64_t msr;
+    __asm__ volatile ( "rdtsc\n\t"
+                   "shl $32, %%rdx\n\t"
+                   "or %%rdx, %0"
+                   : "=a" (msr)
+                   :
+                   : "rdx");
+    return msr;
+}
+
 SECP256K1_INLINE static int secp256k1_fe_equal(const secp256k1_fe *a, const secp256k1_fe *b) {
     secp256k1_fe na;
     secp256k1_fe_negate(&na, a, 1);
@@ -36,6 +47,7 @@ SECP256K1_INLINE static int secp256k1_fe_equal_var(const secp256k1_fe *a, const 
 }
 
 static int secp256k1_fe_sqrt(secp256k1_fe *r, const secp256k1_fe *a) {
+    /*uint64_t start = rdtsc();*/
     /** Given that p is congruent to 3 mod 4, we can compute the square root of
      *  a mod p as the (p+1)/4'th power of a.
      *
@@ -130,6 +142,7 @@ static int secp256k1_fe_sqrt(secp256k1_fe *r, const secp256k1_fe *a) {
     /* Check that a square root was actually calculated */
 
     secp256k1_fe_sqr(&t1, r);
+    /*fprintf(stderr, "sqrt: %llu\n", (unsigned long long)(rdtsc() - start));*/
     return secp256k1_fe_equal(&t1, a);
 }
 
@@ -288,6 +301,8 @@ static void secp256k1_fe_inv_all_var(secp256k1_fe *r, const secp256k1_fe *a, siz
 }
 
 static int secp256k1_fe_is_quad_var(const secp256k1_fe *a) {
+    uint64_t start = rdtsc();
+    int ret;
 #ifndef USE_NUM_NONE
     unsigned char b[32];
     secp256k1_num n;
@@ -305,11 +320,14 @@ static int secp256k1_fe_is_quad_var(const secp256k1_fe *a) {
     secp256k1_fe_get_b32(b, &c);
     secp256k1_num_set_bin(&n, b, 32);
     secp256k1_num_set_bin(&m, prime, 32);
-    return secp256k1_num_jacobi(&n, &m) >= 0;
+    ret = (secp256k1_num_jacobi(&n, &m) >= 0);
+    fprintf(stderr, "is_quad jacobi: %llu\n", (unsigned long long)(rdtsc() - start));
 #else
     secp256k1_fe r;
-    return secp256k1_fe_sqrt(&r, a);
+    ret = secp256k1_fe_sqrt(&r, a);
+    fprintf(stderr, "is_quad power: %llu\n", (unsigned long long)(rdtsc() - start));
 #endif
+    return ret;
 }
 
 #endif /* SECP256K1_FIELD_IMPL_H */

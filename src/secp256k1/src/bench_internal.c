@@ -231,8 +231,14 @@ void bench_group_jacobi_var(void* arg) {
     int i;
     bench_inv_t *data = (bench_inv_t*)arg;
 
+    secp256k1_gej gej = data->gej_x;
+
     for (i = 0; i < 20000; i++) {
-        secp256k1_gej_has_quad_y_var(&data->gej_x);
+        secp256k1_fe y2, y4;
+        secp256k1_fe_sqr(&y2, &gej.y);
+        secp256k1_fe_sqr(&y4, &y2);
+        secp256k1_fe_mul(&gej.y, &gej.y, &y4);
+        secp256k1_gej_has_quad_y_var(&gej);
     }
 }
 
