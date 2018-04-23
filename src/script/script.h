@@ -452,7 +452,7 @@ public:
         return *this;
     }
 
-    CScript& operator<<(const std::vector<unsigned char>& b)
+    CScript& operator<<(const Span<const unsigned char>& b)
     {
         if (b.size() < OP_PUSHDATA1)
         {
@@ -479,6 +479,11 @@ public:
         }
         insert(end(), b.begin(), b.end());
         return *this;
+    }
+
+    CScript& operator<<(const std::vector<unsigned char>& b)
+    {
+        return (*this) << MakeSpan(b);
     }
 
     CScript& operator<<(const CScript& b)
