@@ -85,12 +85,12 @@ static constexpr uint8_t PSBT_NUM_IN_VIN = 0x04;
 // as a 0 length key. which indicates that this is the separator. The separator has no value.
 static const uint8_t PSBT_SEPARATOR = 0x00;
 
-template<typename X>
-std::vector<unsigned char> SerializeToVector(uint8_t header, const X& x)
+template<typename... X>
+std::vector<unsigned char> SerializeToVector(const X&... args)
 {
     std::vector<unsigned char> ret;
     CVectorWriter ss(SER_NETWORK, PROTOCOL_VERSION, ret, 0);
-    ss << header << x;
+    SerializeMany(ss, args...);
     return ret;
 }
 
@@ -134,12 +134,10 @@ struct PartiallySignedTransaction
         // Write transaction if it exists
         if (!CTransaction(tx).IsNull()) {
             // unsigned tx flag
-            WriteCompactSize(s, sizeof(PSBT_UNSIGNED_TX_NON_WITNESS_UTXO));
-            s << PSBT_UNSIGNED_TX_NON_WITNESS_UTXO;
+            s << SerializeToVector(PSBT_UNSIGNED_TX_NON_WITNESS_UTXO);
 
             // Write serialized tx to a stream
-            WriteCompactSize(s, ::GetSerializeSize(tx, SER_NETWORK, PROTOCOL_VERSION));
-            s << tx;
+            s << SerializeToVector(tx);
         }
 
         // Write redeem scripts and witness scripts
@@ -153,7 +151,7 @@ struct PartiallySignedTransaction
         }
         // Write any hd keypaths
         for (auto keypath_pair : hd_keypaths) {
-            s << SerializeToVector(PSBT_BIP32_KEYPATH_SIGHASH, Span<const unsigned char>(keypath_pair.first.begin(), keypath_pair.first.size()));
+            s << SerializeToVector(PSBT_BIP32_KEYPATH_SIGHASH, MakeSpan(keypath_pair.first));
             WriteCompactSize(s, keypath_pair.second.size() * sizeof(uint32_t));
             for (auto& path : keypath_pair.second) {
                 s << path;
@@ -162,9 +160,8 @@ struct PartiallySignedTransaction
 
         // Write the number of inputs
         if (num_ins > 0) {
-            s << PSBT_NUM_IN_VIN;
-            WriteCompactSize(s, GetSizeOfCompactSize(num_ins));
-            WriteCompactSize(s, num_ins);
+            s << SerializeToVector(PSBT_NUM_IN_VIN);
+            s << SerializeToVector(COMPACTSIZE(num_ins));
         }
 
         // Write the unknown things
@@ -183,38 +180,29 @@ struct PartiallySignedTransaction
                 // Write the utxo
                 // If there is a non-witness utxo, then don't add the witness one.
                 if (psbt_in.non_witness_utxo) {
-                    WriteCompactSize(s, sizeof(PSBT_UNSIGNED_TX_NON_WITNESS_UTXO));
-                    s << PSBT_UNSIGNED_TX_NON_WITNESS_UTXO;
-                    WriteCompactSize(s, ::GetSerializeSize(psbt_in.non_witness_utxo, SER_NETWORK, PROTOCOL_VERSION));
-                    s << psbt_in.non_witness_utxo;
+                    s << SerializeToVector(PSBT_UNSIGNED_TX_NON_WITNESS_UTXO);
+                    s << SerializeToVector(psbt_in.non_witness_utxo);
                 } else if (!psbt_in.witness_utxo.IsNull()) {
-                    WriteCompactSize(s, sizeof(PSBT_REDEEMSCRIPT_WITNESS_UTXO));
-                    s << PSBT_REDEEMSCRIPT_WITNESS_UTXO;
-                    WriteCompactSize(s, ::GetSerializeSize(psbt_in.witness_utxo, SER_NETWORK, PROTOCOL_VERSION));
-                    s << psbt_in.witness_utxo;
+                    s << SerializeToVector(PSBT_REDEEMSCRIPT_WITNESS_UTXO);
+                    s << SerializeToVector(psbt_in.witness_utxo);
                 }
 
                 // Write any partial signatures
                 for (auto sig_pair : psbt_in.partial_sigs) {
-                    s << SerializeToVector(PSBT_WITNESSSCRIPT_PARTIAL_SIG, Span<const unsigned char>(sig_pair.first.begin(), sig_pair.first.size()));
-                    WriteCompactSize(s, sig_pair.second.size());
-                    s << MakeSpan(sig_pair.second);
+                    s << SerializeToVector(PSBT_WITNESSSCRIPT_PARTIAL_SIG, MakeSpan(sig_pair.first));
+                    s << sig_pair.second;
                 }
 
                 // Write the sighash type
                 if (psbt_in.sighash_type > 0) {
-                    WriteCompactSize(s, sizeof(PSBT_BIP32_KEYPATH_SIGHASH));
-                    s << PSBT_BIP32_KEYPATH_SIGHASH;
-                    WriteCompactSize(s, GetSizeOfCompactSize(psbt_in.sighash_type));
-                    s << psbt_in.sighash_type;
+                    s << SerializeToVector(PSBT_BIP32_KEYPATH_SIGHASH);
+                    s << SerializeToVector(psbt_in.sighash_type);
                 }
 
                 // Write the index
                 if (use_in_index) {
-                    WriteCompactSize(s, sizeof(PSBT_NUM_IN_VIN));
-                    s << PSBT_NUM_IN_VIN;
-                    WriteCompactSize(s, sizeof(psbt_in.index));
-                    s << psbt_in.index;
+                    s << SerializeToVector(PSBT_NUM_IN_VIN);
+                    s << SerializeToVector(COMPACTSIZE(psbt_in.index));
                 }
             }
 
