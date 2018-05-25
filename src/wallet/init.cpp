@@ -240,6 +240,10 @@ void WalletInit::Start(CScheduler& scheduler) const
 {
     for (const std::shared_ptr<CWallet>& pwallet : GetWallets()) {
         pwallet->postInitProcess();
+        int64_t begin = GetTimeMicros();
+        AllIsMine(*pwallet);
+        int64_t end = GetTimeMicros();
+        LogPrintf("Iteration: %i\n", end - begin);
     }
 
     // Run a thread to flush wallet periodically

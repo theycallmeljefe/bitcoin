@@ -5,6 +5,8 @@
 
 #include <script/ismine.h>
 
+#include <utilstrencodings.h>
+#include <util.h>
 #include <key.h>
 #include <keystore.h>
 #include <script/script.h>
@@ -194,4 +196,20 @@ isminetype IsMine(const CKeyStore& keystore, const CTxDestination& dest)
 {
     CScript script = GetScriptForDestination(dest);
     return IsMine(keystore, script);
+}
+
+void AllIsMine(const CKeyStore& keystore)
+{
+    auto producer = keystore.Producer();
+    CScript script;
+    while (producer->Produce(script)) {
+        IsMineResult res = IsMineInner(keystore, script, IsMineSigVersion::TOP);
+        if (res == IsMineResult::WATCH_ONLY) {
+            LogPrintf("W: %s\n", HexStr(script.begin(), script.end()));
+        } else if (res == IsMineResult::SPENDABLE) {
+            LogPrintf("S: %s\n", HexStr(script.begin(), script.end()));
+        } else {
+            LogPrintf("NN %s\n", HexStr(script.begin(), script.end()));
+        }
+    }
 }

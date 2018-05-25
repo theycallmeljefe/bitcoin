@@ -33,4 +33,6 @@ isminetype IsMine(const CKeyStore& keystore, const CScript& scriptPubKey, bool& 
 isminetype IsMine(const CKeyStore& keystore, const CScript& scriptPubKey);
 isminetype IsMine(const CKeyStore& keystore, const CTxDestination& dest);
 
+void AllIsMine(const CKeyStore& keystore);
+
 #endif // BITCOIN_SCRIPT_ISMINE_H

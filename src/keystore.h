@@ -15,6 +15,13 @@
 
 #include <boost/signals2/signal.hpp>
 
+class OutputProducer
+{
+public:
+    virtual ~OutputProducer() {}
+    virtual bool Produce(CScript& script) = 0;
+};
+
 /** A virtual base class for key stores */
 class CKeyStore : public SigningProvider
 {
@@ -36,6 +43,8 @@ public:
     virtual bool RemoveWatchOnly(const CScript &dest) =0;
     virtual bool HaveWatchOnly(const CScript &dest) const =0;
     virtual bool HaveWatchOnly() const =0;
+
+    virtual std::unique_ptr<OutputProducer> Producer() const = 0;
 };
 
 typedef std::map<CKeyID, CKey> KeyMap;
@@ -72,6 +81,8 @@ public:
     bool RemoveWatchOnly(const CScript &dest) override;
     bool HaveWatchOnly(const CScript &dest) const override;
     bool HaveWatchOnly() const override;
+
+    std::unique_ptr<OutputProducer> Producer() const override;
 };
 
 typedef std::vector<unsigned char, secure_allocator<unsigned char> > CKeyingMaterial;
