@@ -562,4 +562,18 @@ BOOST_AUTO_TEST_CASE(sha256d64)
     }
 }
 
+BOOST_AUTO_TEST_CASE(sha256s32)
+{
+    for (int i = 0; i <= 32; ++i) {
+        unsigned char in[32];
+        unsigned char out1[32], out2[32];
+        for (int j = 0; j < 64; ++j) {
+            in[j] = InsecureRandBits(8);
+        }
+        CSHA256().Write(in, 32).Finalize(out1);
+        SHA256S32(out2, in);
+        BOOST_CHECK(memcmp(out1, out2, 32) == 0);
+    }
+}
+
 BOOST_AUTO_TEST_SUITE_END()
