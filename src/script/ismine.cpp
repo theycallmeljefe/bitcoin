@@ -180,11 +180,11 @@ isminetype IsMine(const CKeyStore& keystore, const CScript& scriptPubKey, bool& 
     case IsMineResult::INVALID:
         isInvalid = true;
     case IsMineResult::NO:
-        return ISMINE_NO;
+        return isminetype::NO;
     case IsMineResult::WATCH_ONLY:
-        return ISMINE_WATCH_ONLY;
+        return isminetype::WATCH_ONLY;
     case IsMineResult::SPENDABLE:
-        return ISMINE_SPENDABLE;
+        return isminetype::SPENDABLE;
     }
     assert(false);
 }

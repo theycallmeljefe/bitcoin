@@ -73,10 +73,10 @@ WalletTx MakeWalletTx(CWallet& wallet, const CWalletTx& wtx)
         result.txout_address.emplace_back();
         result.txout_address_is_mine.emplace_back(ExtractDestination(txout.scriptPubKey, result.txout_address.back()) ?
                                                       IsMine(wallet, result.txout_address.back()) :
-                                                      ISMINE_NO);
+                                                      isminetype::NO);
     }
-    result.credit = wtx.GetCredit(ISMINE_ALL);
-    result.debit = wtx.GetDebit(ISMINE_ALL);
+    result.credit = wtx.GetCredit(IsMineFilter::ALL);
+    result.debit = wtx.GetDebit(IsMineFilter::ALL);
     result.change = wtx.GetChange();
     result.time = wtx.GetTxTime();
     result.value_map = wtx.mapValue;
@@ -142,7 +142,7 @@ public:
     }
     bool getPubKey(const CKeyID& address, CPubKey& pub_key) override { return m_wallet.GetPubKey(address, pub_key); }
     bool getPrivKey(const CKeyID& address, CKey& key) override { return m_wallet.GetKey(address, key); }
-    bool isSpendable(const CTxDestination& dest) override { return IsMine(m_wallet, dest) & ISMINE_SPENDABLE; }
+    bool isSpendable(const CTxDestination& dest) override { return IsMineMatch(IsMine(m_wallet, dest), IsMineFilter::SPENDABLE); }
     bool haveWatchOnly() override { return m_wallet.HaveWatchOnly(); };
     bool setAddressBook(const CTxDestination& dest, const std::string& name, const std::string& purpose) override
     {

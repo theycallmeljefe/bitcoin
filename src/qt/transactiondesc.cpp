@@ -107,7 +107,7 @@ QString TransactionDesc::toHTML(interfaces::Node& node, interfaces::Wallet& wall
                     strHTML += "<b>" + tr("From") + ":</b> " + tr("unknown") + "<br>";
                     strHTML += "<b>" + tr("To") + ":</b> ";
                     strHTML += GUIUtil::HtmlEscape(rec->address);
-                    QString addressOwned = ismine == ISMINE_SPENDABLE ? tr("own address") : tr("watch-only");
+                    QString addressOwned = IsMineMatch(ismine, isminefilter::SPENDABLE) ? tr("own address") : tr("watch-only");
                     if (!name.empty())
                         strHTML += " (" + addressOwned + ", " + tr("label") + ": " + GUIUtil::HtmlEscape(name) + ")";
                     else
@@ -144,7 +144,7 @@ QString TransactionDesc::toHTML(interfaces::Node& node, interfaces::Wallet& wall
         //
         CAmount nUnmatured = 0;
         for (const CTxOut& txout : wtx.tx->vout)
-            nUnmatured += wallet.getCredit(txout, ISMINE_ALL);
+            nUnmatured += wallet.getCredit(txout, isminefilter::ALL);
         strHTML += "<b>" + tr("Credit") + ":</b> ";
         if (status.is_in_main_chain)
             strHTML += BitcoinUnits::formatHtmlWithUnit(unit, nUnmatured)+ " (" + tr("matures in %n more block(s)", "", status.blocks_to_maturity) + ")";
@@ -164,18 +164,18 @@ QString TransactionDesc::toHTML(interfaces::Node& node, interfaces::Wallet& wall
         isminetype fAllFromMe = ISMINE_SPENDABLE;
         for (isminetype mine : wtx.txin_is_mine)
         {
-            if(fAllFromMe > mine) fAllFromMe = mine;
+            fAllFromMe = IsMineWorst(fAllFromMe, mine);
         }
 
         isminetype fAllToMe = ISMINE_SPENDABLE;
         for (isminetype mine : wtx.txout_is_mine)
         {
-            if(fAllToMe > mine) fAllToMe = mine;
+            fAllToMe = IsMineWorst(fAllToMe, mine);
         }
 
         if (fAllFromMe)
         {
-            if(fAllFromMe & ISMINE_WATCH_ONLY)
+            if(IsMineMatch(fAllFromMe & isminefilter::WATCH_ONLY))
                 strHTML += "<b>" + tr("From") + ":</b> " + tr("watch-only") + "<br>";
 
             //

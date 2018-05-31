@@ -1390,10 +1390,10 @@ bool CWallet::IsMine(const CTransaction& tx) const
 
 bool CWallet::IsFromMe(const CTransaction& tx) const
 {
-    return (GetDebit(tx, ISMINE_ALL) > 0);
+    return (GetDebit(tx, IsMinePattern::ALL) > 0);
 }
 
-CAmount CWallet::GetDebit(const CTransaction& tx, const isminefilter& filter) const
+CAmount CWallet::GetDebit(const CTransaction& tx, IsMineFilter filter) const
 {
     CAmount nDebit = 0;
     for (const CTxIn& txin : tx.vin)
@@ -2372,12 +2372,12 @@ void CWallet::AvailableCoins(std::vector<COutput> &vCoins, bool fOnlySafe, const
 
             isminetype mine = IsMine(pcoin->tx->vout[i]);
 
-            if (mine == ISMINE_NO) {
+            if (!IsMineMatch(mine, IsMineFilter::ANY)) {
                 continue;
             }
 
             bool solvable = IsSolvable(*this, pcoin->tx->vout[i].scriptPubKey);
-            bool spendable = ((mine & ISMINE_SPENDABLE) != ISMINE_NO) || (((mine & ISMINE_WATCH_ONLY) != ISMINE_NO) && (coinControl && coinControl->fAllowWatchOnly && solvable));
+            bool spendable = solvable && IsMineMatch(mine, coincontrol && coincontrol->fAllowWatchOnly ? IsMineFilter::ANY : IsMineFilter::SPENDABLE);
 
             vCoins.push_back(COutput(pcoin, i, nDepth, spendable, solvable, safeTx));
 
