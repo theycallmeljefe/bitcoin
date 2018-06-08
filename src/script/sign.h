@@ -56,9 +56,12 @@ extern const BaseSignatureCreator& DUMMY_SIGNATURE_CREATOR;
 struct SignatureData {
     CScript scriptSig;
     CScriptWitness scriptWitness;
+    std::map<CPubKey, std::vector<unsigned char>> signatures;
+    std::map<uint160, CScript> scripts;
 
     SignatureData() {}
     explicit SignatureData(const CScript& script) : scriptSig(script) {}
+    void UpdateWithSignatureData(SignatureData sigdata);
 };
 
 /** Produce a script signature using a generic signature creator. */
@@ -72,7 +75,7 @@ bool SignSignature(const SigningProvider &provider, const CTransaction& txFrom, 
 SignatureData CombineSignatures(const CScript& scriptPubKey, const BaseSignatureChecker& checker, const SignatureData& scriptSig1, const SignatureData& scriptSig2);
 
 /** Extract signature data from a transaction, and insert it. */
-SignatureData DataFromTransaction(const CMutableTransaction& tx, unsigned int nIn);
+SignatureData DataFromTransaction(const CMutableTransaction& tx, unsigned int nIn, const CTxOut& txout);
 void UpdateInput(CTxIn& input, const SignatureData& data);
 
 /* Check whether we know how to sign for an output like this, assuming we
@@ -80,5 +83,15 @@ void UpdateInput(CTxIn& input, const SignatureData& data);
  * provider is used to look up public keys and redeemscripts by hash.
  * Solvability is unrelated to whether we consider this output to be ours. */
 bool IsSolvable(const SigningProvider& provider, const CScript& script);
+
+class SignatureExtractorChecker : public MutableTransactionSignatureChecker
+{
+private:
+    SignatureData* sigdata;
+
+public:
+    SignatureExtractorChecker(const CMutableTransaction* txToIn, unsigned int nInIn, const CAmount& amountIn, SignatureData* sigdata) : MutableTransactionSignatureChecker(txToIn, nInIn, amountIn), sigdata(sigdata) {}
+    bool CheckSig(const std::vector<unsigned char>& scriptSig, const std::vector<unsigned char>& vchPubKey, const CScript& scriptCode, SigVersion sigversion) const override;
+};
 
 #endif // BITCOIN_SCRIPT_SIGN_H

@@ -184,12 +184,101 @@ bool ProduceSignature(const SigningProvider& provider, const BaseSignatureCreato
     return solved && VerifyScript(sigdata.scriptSig, fromPubKey, &sigdata.scriptWitness, STANDARD_SCRIPT_VERIFY_FLAGS, creator.Checker());
 }
 
-SignatureData DataFromTransaction(const CMutableTransaction& tx, unsigned int nIn)
+bool SignatureExtractorChecker::CheckSig(const std::vector<unsigned char>& scriptSig, const std::vector<unsigned char>& vchPubKey, const CScript& scriptCode, SigVersion sigversion) const
+{
+    if (MutableTransactionSignatureChecker::CheckSig(scriptSig, vchPubKey, scriptCode, sigversion)) {
+        CPubKey pubkey(vchPubKey);
+        sigdata->signatures.emplace(pubkey, scriptSig);
+        return true;
+    }
+    return false;
+}
+
+namespace
+{
+struct Stacks
+{
+    std::vector<valtype> script;
+    std::vector<valtype> witness;
+
+    Stacks() {}
+    explicit Stacks(const std::vector<valtype>& scriptSigStack_) : script(scriptSigStack_), witness() {}
+    explicit Stacks(const SignatureData& data) : witness(data.scriptWitness.stack) {
+        EvalScript(script, data.scriptSig, SCRIPT_VERIFY_STRICTENC, BaseSignatureChecker(), SigVersion::BASE);
+    }
+
+    SignatureData Output() const {
+        SignatureData result;
+        result.scriptSig = PushAll(script);
+        result.scriptWitness.stack = witness;
+        return result;
+    }
+};
+}
+
+// Extracts signatures and scripts from scriptSigs. Please do not extend this, use PSBT instead
+SignatureData DataFromTransaction(const CMutableTransaction& tx, unsigned int nIn, const CTxOut& txout)
 {
     SignatureData data;
     assert(tx.vin.size() > nIn);
     data.scriptSig = tx.vin[nIn].scriptSig;
     data.scriptWitness = tx.vin[nIn].scriptWitness;
+    Stacks stack(data);
+
+    // Get signatures
+    SignatureExtractorChecker checker(&tx, nIn, txout.nValue, &data);
+    VerifyScript(data.scriptSig, txout.scriptPubKey, &data.scriptWitness, STANDARD_SCRIPT_VERIFY_FLAGS, checker);
+
+    // Get scripts
+    txnouttype script_type;
+    std::vector<std::vector<unsigned char> > solutions;
+    Solver(txout.scriptPubKey, script_type, solutions);
+    SigVersion sigversion = SigVersion::BASE;
+    CScript next_script = txout.scriptPubKey;
+
+    if (script_type == TX_SCRIPTHASH && !stack.script.empty() && !stack.script.back().empty()) {
+        // Get the redeemScript
+        CScript redeem_script(stack.script.back().begin(), stack.script.back().end());
+        data.scripts.emplace(CScriptID(redeem_script), redeem_script);
+        next_script = redeem_script;
+
+        // Get redeemScript type
+        Solver(next_script, script_type, solutions);
+        stack.script.pop_back();
+    }
+    if (script_type == TX_WITNESS_V0_SCRIPTHASH && !stack.witness.empty() && !stack.witness.back().empty()) {
+        // Get the witnessScript
+        CScript witness_script(stack.witness.back().begin(), stack.witness.back().end());
+        data.scripts.emplace(CScriptID(witness_script), witness_script);
+        next_script = witness_script;
+
+        // Get witnessScript type
+        Solver(next_script, script_type, solutions);
+        stack.witness.pop_back();
+        stack.script = stack.witness;
+        stack.witness.clear();
+        sigversion = SigVersion::WITNESS_V0;
+    }
+    if (script_type == TX_MULTISIG && !stack.script.empty()) {
+        // Build a map of pubkey -> signature by matching sigs to pubkeys:
+        assert(solutions.size() > 1);
+        unsigned int num_pubkeys = solutions.size()-2;
+        for (const valtype& sig : stack.script)
+        {
+            for (unsigned int i = 0; i < num_pubkeys; i++)
+            {
+                const valtype& pubkey = solutions[i+1];
+                if (data.signatures.count(CPubKey(pubkey)))
+                    continue; // Already got a sig for this pubkey
+
+                if (checker.CheckSig(sig, pubkey, next_script, sigversion))
+                {
+                    break;
+                }
+            }
+        }
+    }
+
     return data;
 }
 
@@ -197,6 +286,12 @@ void UpdateInput(CTxIn& input, const SignatureData& data)
 {
     input.scriptSig = data.scriptSig;
     input.scriptWitness = data.scriptWitness;
+}
+
+void SignatureData::UpdateWithSignatureData(SignatureData sigdata)
+{
+    scripts.insert(sigdata.scripts.begin(), sigdata.scripts.end());
+    signatures.insert(sigdata.signatures.begin(), sigdata.signatures.end());
 }
 
 bool SignSignature(const SigningProvider &provider, const CScript& fromPubKey, CMutableTransaction& txTo, unsigned int nIn, const CAmount& amount, int nHashType)
@@ -274,28 +369,6 @@ static std::vector<valtype> CombineMultisig(const CScript& scriptPubKey, const B
         result.push_back(valtype());
 
     return result;
-}
-
-namespace
-{
-struct Stacks
-{
-    std::vector<valtype> script;
-    std::vector<valtype> witness;
-
-    Stacks() {}
-    explicit Stacks(const std::vector<valtype>& scriptSigStack_) : script(scriptSigStack_), witness() {}
-    explicit Stacks(const SignatureData& data) : witness(data.scriptWitness.stack) {
-        EvalScript(script, data.scriptSig, SCRIPT_VERIFY_STRICTENC, BaseSignatureChecker(), SigVersion::BASE);
-    }
-
-    SignatureData Output() const {
-        SignatureData result;
-        result.scriptSig = PushAll(script);
-        result.scriptWitness.stack = witness;
-        return result;
-    }
-};
 }
 
 static Stacks CombineSignatures(const CScript& scriptPubKey, const BaseSignatureChecker& checker,
