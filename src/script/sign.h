@@ -64,6 +64,31 @@ struct SignatureData {
     void UpdateWithSignatureData(SignatureData sigdata);
 };
 
+/** A signing provider which wraps another SigningProvider and SignatureData. It retrieves data from both. */
+class SignatureDataSigningProvider : public SigningProvider
+{
+private:
+    SignatureData* sigdata;
+    const SigningProvider* provider;
+
+public:
+    SignatureDataSigningProvider(SignatureData* sigdata, const SigningProvider* provider) : sigdata(sigdata), provider(provider) {}
+    bool GetCScript(const CScriptID &scriptid, CScript& script) const override;
+    bool GetPubKey(const CKeyID &address, CPubKey& pubkey) const override;
+    bool GetKey(const CKeyID &address, CKey& key) const override;
+};
+
+/** A SignatureCreator which wraps another SignatureCreator and SignatureData and retrieves sigs from both */
+class SignatureDataSignatureCreator : public MutableTransactionSignatureCreator
+{
+private:
+    SignatureData* sigdata;
+
+public:
+    SignatureDataSignatureCreator(SignatureData* sigdata, const CMutableTransaction* tx, unsigned int vin, const CAmount& amount, int hash_type = SIGHASH_ALL) : MutableTransactionSignatureCreator(tx, vin, amount, hash_type), sigdata(sigdata) {}
+    bool CreateSig(const SigningProvider& provider, std::vector<unsigned char>& vchSig, const CKeyID& address, const CScript& scriptCode, SigVersion sigversion) const override;
+};
+
 /** Produce a script signature using a generic signature creator. */
 bool ProduceSignature(const SigningProvider& provider, const BaseSignatureCreator& creator, const CScript& scriptPubKey, SignatureData& sigdata);
 

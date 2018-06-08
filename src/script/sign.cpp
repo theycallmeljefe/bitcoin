@@ -33,6 +33,25 @@ bool MutableTransactionSignatureCreator::CreateSig(const SigningProvider& provid
     return true;
 }
 
+bool SignatureDataSignatureCreator::CreateSig(const SigningProvider& provider, std::vector<unsigned char>& vchSig, const CKeyID& address, const CScript& scriptCode, SigVersion sigversion) const
+{
+    CPubKey pubkey;
+    if (!provider.GetPubKey(address, pubkey)) {
+        return false;
+    }
+    auto sig_it = sigdata->signatures.find(pubkey);
+    if (sig_it != sigdata->signatures.end()) {
+        vchSig = sig_it->second;
+        return true;
+    }
+
+    if (MutableTransactionSignatureCreator::CreateSig(provider, vchSig, address, scriptCode, sigversion)) {
+        sigdata->signatures.emplace(pubkey, vchSig);
+        return true;
+    }
+    return false;
+}
+
 static bool Sign1(const SigningProvider& provider, const CKeyID& address, const BaseSignatureCreator& creator, const CScript& scriptCode, std::vector<valtype>& ret, SigVersion sigversion)
 {
     std::vector<unsigned char> vchSig;
@@ -53,6 +72,9 @@ static bool SignN(const SigningProvider& provider, const std::vector<valtype>& m
         if (Sign1(provider, keyID, creator, scriptCode, ret, sigversion))
             ++nSigned;
     }
+    // Fill any missing with OP_0:
+    for (int i = nSigned; i < nRequired; i++)
+        ret.push_back(valtype());
     return nSigned==nRequired;
 }
 
@@ -506,4 +528,38 @@ bool IsSolvable(const SigningProvider& provider, const CScript& script)
         return true;
     }
     return false;
+}
+
+bool SignatureDataSigningProvider::GetCScript(const CScriptID &scriptid, CScript& script) const
+{
+    if (provider != nullptr && provider->GetCScript(scriptid, script)) {
+        return true;
+    }
+    // Look for scripts in SignatureData
+    auto mi = sigdata->scripts.find(scriptid);
+    if (mi != sigdata->scripts.end()) {
+        script = (*mi).second;
+        return true;
+    }
+    return false;
+}
+
+bool SignatureDataSigningProvider::GetPubKey(const CKeyID &address, CPubKey& vchPubKeyOut) const
+{
+    if (provider != nullptr && provider->GetPubKey(address, vchPubKeyOut)) {
+        return true;
+    }
+    // Look for pubkey in all partial sigs
+    for (auto& it : sigdata->signatures) {
+        if (it.first.GetID() == address) {
+            vchPubKeyOut = it.first;
+            return true;
+        }
+    }
+    return false;
+}
+
+bool SignatureDataSigningProvider::GetKey(const CKeyID &address, CKey& key) const
+{
+    return provider != nullptr && provider->GetKey(address, key);
 }
