@@ -631,7 +631,7 @@ BOOST_AUTO_TEST_CASE(test_witness)
     BOOST_CHECK(*output1 == *output2);
     sigdata = DataFromTransaction(input1, 0, output1->vout[0]);
     sigdata.UpdateWithSignatureData(DataFromTransaction(input2, 0, output1->vout[0]));
-    ProduceSignature(SignatureDataSigningProvider(&sigdata, nullptr), SignatureDataSignatureCreator(&sigdata, &input1, 0, output1->vout[0].nValue), output1->vout[0].scriptPubKey, sigdata);
+    ProduceSignature(SignatureDataSigningProvider(&sigdata, nullptr), MutableTransactionSignatureCreator(&input1, 0, output1->vout[0].nValue), output1->vout[0].scriptPubKey, sigdata);
     UpdateInput(input1.vin[0], sigdata);
     CheckWithFlag(output1, input1, STANDARD_SCRIPT_VERIFY_FLAGS, true);
 
@@ -645,7 +645,7 @@ BOOST_AUTO_TEST_CASE(test_witness)
     BOOST_CHECK(*output1 == *output2);
     sigdata = DataFromTransaction(input1, 0, output1->vout[0]);
     sigdata.UpdateWithSignatureData(DataFromTransaction(input2, 0, output1->vout[0]));
-    ProduceSignature(SignatureDataSigningProvider(&sigdata, nullptr), SignatureDataSignatureCreator(&sigdata, &input1, 0, output1->vout[0].nValue), output1->vout[0].scriptPubKey, sigdata);
+    ProduceSignature(SignatureDataSigningProvider(&sigdata, nullptr), MutableTransactionSignatureCreator(&input1, 0, output1->vout[0].nValue), output1->vout[0].scriptPubKey, sigdata);
     UpdateInput(input1.vin[0], sigdata);
     CheckWithFlag(output1, input1, SCRIPT_VERIFY_P2SH, true);
     CheckWithFlag(output1, input1, STANDARD_SCRIPT_VERIFY_FLAGS, true);
@@ -660,7 +660,7 @@ BOOST_AUTO_TEST_CASE(test_witness)
     BOOST_CHECK(*output1 == *output2);
     sigdata = DataFromTransaction(input1, 0, output1->vout[0]);
     sigdata.UpdateWithSignatureData(DataFromTransaction(input2, 0, output1->vout[0]));
-    ProduceSignature(SignatureDataSigningProvider(&sigdata, nullptr), SignatureDataSignatureCreator(&sigdata, &input1, 0, output1->vout[0].nValue), output1->vout[0].scriptPubKey, sigdata);
+    ProduceSignature(SignatureDataSigningProvider(&sigdata, nullptr), MutableTransactionSignatureCreator(&input1, 0, output1->vout[0].nValue), output1->vout[0].scriptPubKey, sigdata);
     UpdateInput(input1.vin[0], sigdata);
     CheckWithFlag(output1, input1, SCRIPT_VERIFY_P2SH | SCRIPT_VERIFY_WITNESS, true);
     CheckWithFlag(output1, input1, STANDARD_SCRIPT_VERIFY_FLAGS, true);
@@ -675,7 +675,7 @@ BOOST_AUTO_TEST_CASE(test_witness)
     BOOST_CHECK(*output1 == *output2);
     sigdata = DataFromTransaction(input1, 0, output1->vout[0]);
     sigdata.UpdateWithSignatureData(DataFromTransaction(input2, 0, output1->vout[0]));
-    ProduceSignature(SignatureDataSigningProvider(&sigdata, nullptr), SignatureDataSignatureCreator(&sigdata, &input1, 0, output1->vout[0].nValue), output1->vout[0].scriptPubKey, sigdata);
+    ProduceSignature(SignatureDataSigningProvider(&sigdata, nullptr), MutableTransactionSignatureCreator(&input1, 0, output1->vout[0].nValue), output1->vout[0].scriptPubKey, sigdata);
     UpdateInput(input1.vin[0], sigdata);
     CheckWithFlag(output1, input1, SCRIPT_VERIFY_P2SH | SCRIPT_VERIFY_WITNESS, true);
     CheckWithFlag(output1, input1, STANDARD_SCRIPT_VERIFY_FLAGS, true);

@@ -54,6 +54,7 @@ public:
 extern const BaseSignatureCreator& DUMMY_SIGNATURE_CREATOR;
 
 struct SignatureData {
+    bool complete = false;
     CScript scriptSig;
     CScriptWitness scriptWitness;
     std::map<CPubKey, std::vector<unsigned char>> signatures;
@@ -76,17 +77,6 @@ public:
     bool GetCScript(const CScriptID &scriptid, CScript& script) const override;
     bool GetPubKey(const CKeyID &address, CPubKey& pubkey) const override;
     bool GetKey(const CKeyID &address, CKey& key) const override;
-};
-
-/** A SignatureCreator which wraps another SignatureCreator and SignatureData and retrieves sigs from both */
-class SignatureDataSignatureCreator : public MutableTransactionSignatureCreator
-{
-private:
-    SignatureData* sigdata;
-
-public:
-    SignatureDataSignatureCreator(SignatureData* sigdata, const CMutableTransaction* tx, unsigned int vin, const CAmount& amount, int hash_type = SIGHASH_ALL) : MutableTransactionSignatureCreator(tx, vin, amount, hash_type), sigdata(sigdata) {}
-    bool CreateSig(const SigningProvider& provider, std::vector<unsigned char>& vchSig, const CKeyID& address, const CScript& scriptCode, SigVersion sigversion) const override;
 };
 
 /** Produce a script signature using a generic signature creator. */

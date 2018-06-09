@@ -744,7 +744,7 @@ static UniValue combinerawtransaction(const JSONRPCRequest& request)
                 sigdata.UpdateWithSignatureData(DataFromTransaction(txv, i, coin.out));
             }
         }
-        ProduceSignature(SignatureDataSigningProvider(&sigdata, nullptr), SignatureDataSignatureCreator(&sigdata, &mergedTx, i, coin.out.nValue, 1), coin.out.scriptPubKey, sigdata);
+        ProduceSignature(SignatureDataSigningProvider(&sigdata, nullptr), MutableTransactionSignatureCreator(&mergedTx, i, coin.out.nValue, 1), coin.out.scriptPubKey, sigdata);
 
         UpdateInput(txin, sigdata);
     }
@@ -876,7 +876,7 @@ UniValue SignTransaction(CMutableTransaction& mtx, const UniValue& prevTxsUnival
         SignatureData sigdata = DataFromTransaction(mtx, i, coin.out);
         // Only sign SIGHASH_SINGLE if there's a corresponding output:
         if (!fHashSingle || (i < mtx.vout.size())) {
-            ProduceSignature(SignatureDataSigningProvider(&sigdata, keystore), SignatureDataSignatureCreator(&sigdata, &mtx, i, amount, nHashType), prevPubKey, sigdata);
+            ProduceSignature(SignatureDataSigningProvider(&sigdata, keystore), MutableTransactionSignatureCreator(&mtx, i, amount, nHashType), prevPubKey, sigdata);
         }
 
         UpdateInput(txin, sigdata);

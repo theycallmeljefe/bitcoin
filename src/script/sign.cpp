@@ -11,7 +11,6 @@
 #include <script/standard.h>
 #include <uint256.h>
 
-
 typedef std::vector<unsigned char> valtype;
 
 MutableTransactionSignatureCreator::MutableTransactionSignatureCreator(const CMutableTransaction* txToIn, unsigned int nInIn, const CAmount& amountIn, int nHashTypeIn) : txTo(txToIn), nIn(nInIn), nHashType(nHashTypeIn), amount(amountIn), checker(txTo, nIn, amountIn) {}
@@ -33,51 +32,6 @@ bool MutableTransactionSignatureCreator::CreateSig(const SigningProvider& provid
     return true;
 }
 
-bool SignatureDataSignatureCreator::CreateSig(const SigningProvider& provider, std::vector<unsigned char>& vchSig, const CKeyID& address, const CScript& scriptCode, SigVersion sigversion) const
-{
-    CPubKey pubkey;
-    if (!provider.GetPubKey(address, pubkey)) {
-        return false;
-    }
-    auto sig_it = sigdata->signatures.find(pubkey);
-    if (sig_it != sigdata->signatures.end()) {
-        vchSig = sig_it->second;
-        return true;
-    }
-
-    if (MutableTransactionSignatureCreator::CreateSig(provider, vchSig, address, scriptCode, sigversion)) {
-        sigdata->signatures.emplace(pubkey, vchSig);
-        return true;
-    }
-    return false;
-}
-
-static bool Sign1(const SigningProvider& provider, const CKeyID& address, const BaseSignatureCreator& creator, const CScript& scriptCode, std::vector<valtype>& ret, SigVersion sigversion)
-{
-    std::vector<unsigned char> vchSig;
-    if (!creator.CreateSig(provider, vchSig, address, scriptCode, sigversion))
-        return false;
-    ret.push_back(vchSig);
-    return true;
-}
-
-static bool SignN(const SigningProvider& provider, const std::vector<valtype>& multisigdata, const BaseSignatureCreator& creator, const CScript& scriptCode, std::vector<valtype>& ret, SigVersion sigversion)
-{
-    int nSigned = 0;
-    int nRequired = multisigdata.front()[0];
-    for (unsigned int i = 1; i < multisigdata.size()-1 && nSigned < nRequired; i++)
-    {
-        const valtype& pubkey = multisigdata[i];
-        CKeyID keyID = CPubKey(pubkey).GetID();
-        if (Sign1(provider, keyID, creator, scriptCode, ret, sigversion))
-            ++nSigned;
-    }
-    // Fill any missing with OP_0:
-    for (int i = nSigned; i < nRequired; i++)
-        ret.push_back(valtype());
-    return nSigned==nRequired;
-}
-
 /**
  * Sign scriptPubKey using signature made with creator.
  * Signatures are returned in scriptSigRet (or returns false if scriptPubKey can't be signed),
@@ -85,15 +39,17 @@ static bool SignN(const SigningProvider& provider, const std::vector<valtype>& m
  * Returns false if scriptPubKey could not be completely satisfied.
  */
 static bool SignStep(const SigningProvider& provider, const BaseSignatureCreator& creator, const CScript& scriptPubKey,
-                     std::vector<valtype>& ret, txnouttype& whichTypeRet, SigVersion sigversion)
+                     std::vector<valtype>& ret, txnouttype& whichTypeRet, SigVersion sigversion, SignatureData& sigdata)
 {
     CScript scriptRet;
     uint160 h160;
     ret.clear();
+    std::vector<unsigned char> sig;
 
     std::vector<valtype> vSolutions;
-    if (!Solver(scriptPubKey, whichTypeRet, vSolutions))
+    if (!Solver(scriptPubKey, whichTypeRet, vSolutions)) {
         return false;
+    }
 
     CKeyID keyID;
     switch (whichTypeRet)
@@ -103,19 +59,18 @@ static bool SignStep(const SigningProvider& provider, const BaseSignatureCreator
     case TX_WITNESS_UNKNOWN:
         return false;
     case TX_PUBKEY:
-        keyID = CPubKey(vSolutions[0]).GetID();
-        return Sign1(provider, keyID, creator, scriptPubKey, ret, sigversion);
-    case TX_PUBKEYHASH:
-        keyID = CKeyID(uint160(vSolutions[0]));
-        if (!Sign1(provider, keyID, creator, scriptPubKey, ret, sigversion))
-            return false;
-        else
-        {
-            CPubKey vch;
-            provider.GetPubKey(keyID, vch);
-            ret.push_back(ToByteVector(vch));
-        }
+        if (!creator.CreateSig(provider, sig, CPubKey(vSolutions[0]).GetID(), scriptPubKey, sigversion)) return false;
+        ret.push_back(std::move(sig));
         return true;
+    case TX_PUBKEYHASH: {
+        keyID = CKeyID(uint160(vSolutions[0]));
+        if (!creator.CreateSig(provider, sig, keyID, scriptPubKey, sigversion)) return false;
+        ret.push_back(std::move(sig));
+        CPubKey vch;
+        provider.GetPubKey(keyID, vch);
+        ret.push_back(ToByteVector(vch));
+        return true;
+    }
     case TX_SCRIPTHASH:
         if (provider.GetCScript(uint160(vSolutions[0]), scriptRet)) {
             ret.push_back(std::vector<unsigned char>(scriptRet.begin(), scriptRet.end()));
@@ -123,10 +78,30 @@ static bool SignStep(const SigningProvider& provider, const BaseSignatureCreator
         }
         return false;
 
-    case TX_MULTISIG:
+    case TX_MULTISIG: {
+        size_t required = vSolutions.front()[0];
+        std::map<CPubKey, std::vector<unsigned char>> newsigs;
         ret.push_back(valtype()); // workaround CHECKMULTISIG bug
-        return (SignN(provider, vSolutions, creator, scriptPubKey, ret, sigversion));
-
+        for (size_t i = 1; i < vSolutions.size() - 1; ++i) {
+            CPubKey pubkey = CPubKey(vSolutions[i]);
+            auto it = sigdata.signatures.find(pubkey);
+            if (it != sigdata.signatures.end()) {
+                sig = it->second;
+            } else {
+                if (!creator.CreateSig(provider, sig, pubkey.GetID(), scriptPubKey, sigversion)) sig.clear();
+            }
+            if (!sig.empty() && ret.size() < required + 1) {
+                newsigs.emplace(pubkey, sig);
+                ret.push_back(std::move(sig));
+            }
+        }
+        bool ok = ret.size() == required + 1;
+        for (size_t i = 0; i + ret.size() < required + 1; ++i) {
+            ret.push_back(valtype());
+        }
+        sigdata.signatures = std::move(newsigs);
+        return ok;
+    }
     case TX_WITNESS_V0_KEYHASH:
         ret.push_back(vSolutions[0]);
         return true;
@@ -161,9 +136,11 @@ static CScript PushAll(const std::vector<valtype>& values)
 
 bool ProduceSignature(const SigningProvider& provider, const BaseSignatureCreator& creator, const CScript& fromPubKey, SignatureData& sigdata)
 {
+    if (sigdata.complete) return true;
+
     std::vector<valtype> result;
     txnouttype whichType;
-    bool solved = SignStep(provider, creator, fromPubKey, result, whichType, SigVersion::BASE);
+    bool solved = SignStep(provider, creator, fromPubKey, result, whichType, SigVersion::BASE, sigdata);
     bool P2SH = false;
     CScript subscript;
     sigdata.scriptWitness.stack.clear();
@@ -174,7 +151,8 @@ bool ProduceSignature(const SigningProvider& provider, const BaseSignatureCreato
         // the final scriptSig is the signatures from that
         // and then the serialized subscript:
         subscript = CScript(result[0].begin(), result[0].end());
-        solved = solved && SignStep(provider, creator, subscript, result, whichType, SigVersion::BASE) && whichType != TX_SCRIPTHASH;
+        sigdata.scripts[CScriptID(subscript)] = subscript;
+        solved = solved && SignStep(provider, creator, subscript, result, whichType, SigVersion::BASE, sigdata) && whichType != TX_SCRIPTHASH;
         P2SH = true;
     }
 
@@ -183,15 +161,16 @@ bool ProduceSignature(const SigningProvider& provider, const BaseSignatureCreato
         CScript witnessscript;
         witnessscript << OP_DUP << OP_HASH160 << ToByteVector(result[0]) << OP_EQUALVERIFY << OP_CHECKSIG;
         txnouttype subType;
-        solved = solved && SignStep(provider, creator, witnessscript, result, subType, SigVersion::WITNESS_V0);
+        solved = solved && SignStep(provider, creator, witnessscript, result, subType, SigVersion::WITNESS_V0, sigdata);
         sigdata.scriptWitness.stack = result;
         result.clear();
     }
     else if (solved && whichType == TX_WITNESS_V0_SCRIPTHASH)
     {
         CScript witnessscript(result[0].begin(), result[0].end());
+        sigdata.scripts[CScriptID(witnessscript)] = witnessscript;
         txnouttype subType;
-        solved = solved && SignStep(provider, creator, witnessscript, result, subType, SigVersion::WITNESS_V0) && subType != TX_SCRIPTHASH && subType != TX_WITNESS_V0_SCRIPTHASH && subType != TX_WITNESS_V0_KEYHASH;
+        solved = solved && SignStep(provider, creator, witnessscript, result, subType, SigVersion::WITNESS_V0, sigdata) && subType != TX_SCRIPTHASH && subType != TX_WITNESS_V0_SCRIPTHASH && subType != TX_WITNESS_V0_KEYHASH;
         result.push_back(std::vector<unsigned char>(witnessscript.begin(), witnessscript.end()));
         sigdata.scriptWitness.stack = result;
         result.clear();
@@ -203,7 +182,8 @@ bool ProduceSignature(const SigningProvider& provider, const BaseSignatureCreato
     sigdata.scriptSig = PushAll(result);
 
     // Test solution
-    return solved && VerifyScript(sigdata.scriptSig, fromPubKey, &sigdata.scriptWitness, STANDARD_SCRIPT_VERIFY_FLAGS, creator.Checker());
+    sigdata.complete = solved && VerifyScript(sigdata.scriptSig, fromPubKey, &sigdata.scriptWitness, STANDARD_SCRIPT_VERIFY_FLAGS, creator.Checker());
+    return sigdata.complete;
 }
 
 bool SignatureExtractorChecker::CheckSig(const std::vector<unsigned char>& scriptSig, const std::vector<unsigned char>& vchPubKey, const CScript& scriptCode, SigVersion sigversion) const
@@ -249,7 +229,10 @@ SignatureData DataFromTransaction(const CMutableTransaction& tx, unsigned int nI
 
     // Get signatures
     SignatureExtractorChecker checker(&tx, nIn, txout.nValue, &data);
-    VerifyScript(data.scriptSig, txout.scriptPubKey, &data.scriptWitness, STANDARD_SCRIPT_VERIFY_FLAGS, checker);
+    if (VerifyScript(data.scriptSig, txout.scriptPubKey, &data.scriptWitness, STANDARD_SCRIPT_VERIFY_FLAGS, checker)) {
+        data.complete = true;
+        return data;
+    }
 
     // Get scripts
     txnouttype script_type;
@@ -312,6 +295,11 @@ void UpdateInput(CTxIn& input, const SignatureData& data)
 
 void SignatureData::UpdateWithSignatureData(SignatureData sigdata)
 {
+    if (complete) return;
+    if (sigdata.complete) {
+        *this = std::move(sigdata);
+        return;
+    }
     scripts.insert(sigdata.scripts.begin(), sigdata.scripts.end());
     signatures.insert(sigdata.signatures.begin(), sigdata.signatures.end());
 }
