@@ -815,6 +815,32 @@ static UniValue getblock(const JSONRPCRequest& request)
             verbosity = request.params[1].get_bool() ? 1 : 0;
     }
 
+    if (verbosity == 7) {
+        InStats stat;
+        const CBlockIndex* pindex = chainActive.Tip();
+        while (pindex && pindex->nHeight > chainActive.Height() - 1000) {
+            const CBlock block = GetBlockChecked(pindex);
+            for (int i = 1; i < block.vtx.size(); ++i) {
+                const CTransaction& tx = *block.vtx[i];
+                for (int j = 0; j < tx.vin.size(); ++j) {
+                    Analyze(stat, tx.vin[j].scriptSig, tx.vin[j].scriptWitness);
+                }
+            }
+            if (pindex->nHeight % 2016 == 0) {
+                FILE* f = fopen(strprintf("/tmp/stat-%i-%i.txt", pindex->nHeight, chainActive.Height()).c_str(), "w");
+                std::string ret = Print(stat);
+                fwrite(ret.c_str(), ret.size(), 1, f);
+                fclose(f);
+            }
+            pindex = pindex->pprev;
+        }
+        FILE* f = fopen("/tmp/stat-all", "w");
+        std::string ret = Print(stat);
+        fwrite(ret.c_str(), ret.size(), 1, f);
+        fclose(f);
+        return ret;
+    }
+
     const CBlockIndex* pblockindex = LookupBlockIndex(hash);
     if (!pblockindex) {
         throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Block not found");

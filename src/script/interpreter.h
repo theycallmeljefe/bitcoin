@@ -192,4 +192,60 @@ size_t CountWitnessSigOps(const CScript& scriptSig, const CScript& scriptPubKey,
 
 int FindAndDelete(CScript& script, const CScript& b);
 
+enum class InTemplate {
+    P2PK,
+    P2PKH,
+    P2WPKH,
+    P2SH_P2WPKH,
+    MS,
+    P2SH_MS,
+    P2WSH_MS,
+    P2SH_P2WSH_MS,
+    P2SH_P2WSH_OTHER,
+    WIT_OTHER,
+    P2SH_P2UW,
+    NONWIT_OTHER,
+
+    COUNT
+};
+
+struct InStats {
+    /** Statistics broken down by template, sighash_all (1=all signatures are sighash_all, 0=some or not), compression (0=all uncompressed, 1=compressed, 2=mix), extra parameter
+     * The extra parameter is 21*n + k for k-of-n multisig, the size of scriptSig for NONWIT_OTHER, the number of witness stack elements in WIT_OTHER/P2SH_P2WSH_OTHER.
+     */
+    size_t n[int(InTemplate::COUNT)][2][3][1000];
+
+    //! The same, just broken down by template.
+    size_t t[int(InTemplate::COUNT)];
+
+    //! The same, broken down by tempate, sighash_all, compression.
+    size_t k[int(InTemplate::COUNT)][2][3];
+
+    //! The same, broken down by template and extra paramter.
+
+    //! Total entries.
+    size_t s[int(InTemplate::COUNT)][1000];
+    size_t total;
+
+    InStats() {
+        memset(n, 0, sizeof(n));
+        memset(t, 0, sizeof(t));
+        memset(k, 0, sizeof(k));
+        memset(s, 0, sizeof(s));
+        total = 0;
+    }
+
+    void Add(InTemplate tmp, bool all_all, int compressed, int param) {
+        n[int(tmp)][all_all][compressed][param]++;
+        s[int(tmp)][param]++;
+        k[int(tmp)][all_all][compressed]++;
+        t[int(tmp)]++;
+        total++;
+    }
+};
+
+void Analyze(InStats& stats, const CScript& scriptSig, const CScriptWitness& witness);
+
+std::string Print(const InStats& stats);
+
 #endif // BITCOIN_SCRIPT_INTERPRETER_H

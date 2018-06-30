@@ -4849,3 +4849,4 @@ public:
         mapBlockIndex.clear();
     }
 } instance_of_cmaincleanup;
+

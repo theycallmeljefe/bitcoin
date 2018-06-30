@@ -10,7 +10,11 @@
 #include <crypto/sha256.h>
 #include <pubkey.h>
 #include <script/script.h>
+#include <script/standard.h>
+#include <span.h>
 #include <uint256.h>
+#include <utilstrencodings.h>
+#include <tinyformat.h>
 
 typedef std::vector<unsigned char> valtype;
 
@@ -1633,4 +1637,219 @@ size_t CountWitnessSigOps(const CScript& scriptSig, const CScript& scriptPubKey,
     }
 
     return 0;
+}
+
+namespace {
+
+bool GetPushOnly(std::vector<std::vector<unsigned char>>& out, Span<const unsigned char> sp)
+{
+    out.clear();
+    while (sp.size() > 0) {
+        opcodetype opcode;
+        std::vector<unsigned char> data;
+        if (!GetScriptOp(sp, opcode, &data)) return false;
+        if (opcode == OP_1NEGATE) {
+            data.assign(1, 0x81);
+        } else if (opcode >= OP_1 && opcode <= OP_16) {
+            data.assign(1, opcode - OP_1 + 1);
+        } else {
+            if (opcode < OP_0 || opcode > OP_PUSHDATA4) return false;
+            if (!CheckMinimalPush(data, opcode)) return false;
+        }
+        out.emplace_back(std::move(data));
+    }
+    return true;
+}
+
+bool FullyValidPubkey(const std::vector<unsigned char>& pubkey) {
+    CPubKey p(pubkey);
+    return p.IsFullyValid() && pubkey[0] != 6 && pubkey[0] != 7;
+}
+
+static const std::string names[int(InTemplate::COUNT)] = {
+    "P2PK",
+    "P2PKH",
+    "P2WPKH",
+    "P2SH-P2WPKH",
+    "MS",
+    "P2SH-MS",
+    "P2WSH-MS",
+    "P2SH-P2WSH-MS",
+    "P2SH-P2WSH-OTHER",
+    "WIT-OTHER",
+    "P2SH-P2UW-OTHER",
+    "NONWIT-OTHER",
+};
+
+std::string NameS(int n, int t) {
+    switch (InTemplate(n)) {
+    case InTemplate::P2PK:
+        return strprintf("P2PK");
+    case InTemplate::P2PKH:
+        return strprintf("P2PKH");
+    case InTemplate::P2WPKH:
+        return strprintf("P2WPKH");
+    case InTemplate::P2SH_P2WPKH:
+        return strprintf("P2SH-P2WPKH");
+    case InTemplate::MS:
+        return strprintf("MS-%i", t);
+    case InTemplate::P2SH_MS:
+        return strprintf("P2SH-MS-%i-%i", t % 21, t / 21);
+    case InTemplate::P2WSH_MS:
+        return strprintf("P2WSH-MS-%i-%i", t % 21, t / 21);
+    case InTemplate::P2SH_P2WSH_MS:
+        return strprintf("P2SH-P2WSH-MS-%i-%i", t % 21, t / 21);
+    case InTemplate::P2SH_P2WSH_OTHER:
+        return strprintf("P2SH-P2WSH-OTHER-%i", t);
+    case InTemplate::WIT_OTHER:
+        return strprintf("WIT-OTHER-%i", t);
+    case InTemplate::NONWIT_OTHER:
+        return strprintf("NONWIT-OTHER-%i", t);
+    case InTemplate::P2SH_P2UW:
+        return strprintf("P2SH-P2UW-OTHER-%i", t);
+    default:
+        return "???";
+    }
+    return "WTF";
+}
+
+bool IsPureMultisig(const std::vector<std::vector<unsigned char>>& stack, InStats& stats) {
+    bool all_all = true;
+    if (stack.size() < 2) return false;
+    if (stack[0].size() != 0) return false;
+    for (size_t i = 1; i < stack.size(); ++i) {
+        if (!IsValidSignatureEncoding(stack[i])) return false;
+        if (stack[i].back() != 1) all_all = false;
+    }
+    stats.Add(InTemplate::MS, all_all, true, stack.size() - 1);
+    return true;
+}
+
+bool IsEmbedMultisig(std::vector<std::vector<unsigned char>> stack, InStats& stats, InTemplate temp) {
+    bool all_all = true;
+    bool have_compressed = false;
+    bool have_uncompressed = false;
+    if (stack.size() < 3) return false;
+    if (stack[0].size() != 0) return false;
+    std::vector<unsigned char> redeem = std::move(stack.back());
+    stack.pop_back();
+    if (redeem.size() < 1 || redeem.back() != OP_CHECKMULTISIG) return false;
+    redeem.pop_back();
+    for (size_t i = 1; i < stack.size(); ++i) {
+        if (!IsValidSignatureEncoding(stack[i])) return false;
+        if (stack[i].back() != 1) all_all = false;
+    }
+    std::vector<std::vector<unsigned char>> substack;
+    if (!GetPushOnly(substack, Span<const unsigned char>(redeem.data(), redeem.size()))) return false;
+    if (substack.size() < 3 || substack[0].size() != 1 || substack.back().size() != 1) return false;
+    if (substack[0][0] != stack.size() - 1) return false;
+    if (substack.back()[0] != substack.size() - 2) return false;
+    for (size_t i = 1; i < substack.size() - 1; ++i) {
+        if (!FullyValidPubkey(substack[i])) return false;
+        if (substack[i].size() == 33) have_compressed = true;
+        if (substack[i].size() == 65) have_uncompressed = true;
+    }
+    if (stack.size() - 1 > 20) return false;
+    if (substack.size() - 1 > 21) return false;
+    stats.Add(temp, all_all, have_compressed * 2 + have_uncompressed - 1, (stack.size() - 1) + (substack.size() - 2) * 21);
+    return true;
+}
+
+}
+
+std::string Print(const InStats& stats)
+{
+    std::string ret;
+    for (int i = 0; i < int(InTemplate::COUNT); ++i) {
+        for (int j = 0; j < 2; ++j) {
+            for (int l = 0; l < 3; ++l) {
+                for (int k = 0; k < 21 * 21; ++k) {
+                    if (stats.n[i][j][l][k]) {
+                        ret += strprintf("%i %s-%c%c\n", stats.n[i][j][l][k], NameS(i,k), j ? 'A' : 'G', l == 2 ? 'M' : (l ? 'C' : 'U'));
+                    }
+                }
+            }
+        }
+    }
+    ret += strprintf("%i total\n", stats.total);
+    ret += "\n";
+
+    for (int i = 0; i < int(InTemplate::COUNT); ++i) {
+        for (int j = 0; j < 2; ++j) {
+            for (int l = 0; l < 3; ++l) {
+                if (stats.k[i][j][l]) {
+                    ret += strprintf("%i %s-%c%c\n", stats.k[i][j][l], names[i], j ? 'A' : 'G', l == 2 ? 'M' : (l ? 'C' : 'U'));
+                }
+            }
+        }
+    }
+    ret += strprintf("%i total\n", stats.total);
+    ret += "\n";
+
+    for (int i = 0; i < int(InTemplate::COUNT); ++i) {
+        for (int k = 0; k < 21 * 21; ++k) {
+            if (stats.s[i][k]) {
+                ret += strprintf("%i %s\n", stats.s[i][k], NameS(i,k));
+            }
+        }
+    }
+
+    ret += strprintf("%i total\n", stats.total);
+    ret += "\n";
+    for (int i = 0; i < int(InTemplate::COUNT); ++i) {
+        if (stats.t[i]) {
+            ret += strprintf("%i %s\n", stats.t[i], names[i]);
+        }
+    }
+    ret += strprintf("%i total\n", stats.total);
+
+    return ret;
+}
+
+void Analyze(InStats& stats, const CScript& scriptSig, const CScriptWitness& witness)
+{
+    std::vector<std::vector<unsigned char>> stack;
+    bool pushonly = GetPushOnly(stack, MakeSpan(scriptSig));
+    if (pushonly && witness.stack.size() == 0 && stack.size() == 1 && IsValidSignatureEncoding(stack[0])) {
+        stats.Add(InTemplate::P2PK, stack[0].back() == 1, 1, 0);
+        return;
+    }
+    if (pushonly && witness.stack.size() == 0 && stack.size() == 2 && IsValidSignatureEncoding(stack[0]) && FullyValidPubkey(stack[1])) {
+        stats.Add(InTemplate::P2PKH, stack[0].back() == 1, stack[1].size() == 33, 0);
+        return;
+    }
+    if (pushonly && stack.size() == 0 && witness.stack.size() == 2 && IsValidSignatureEncoding(witness.stack[0]) && FullyValidPubkey(witness.stack[1])) {
+        stats.Add(InTemplate::P2WPKH, witness.stack[0].back() == 1, witness.stack[1].size() == 33, 0);
+        return;
+    }
+    if (pushonly && stack.size() == 1 && witness.stack.size() == 2 && IsValidSignatureEncoding(witness.stack[0]) && FullyValidPubkey(witness.stack[1])) {
+        CScript exp = GetScriptForDestination(WitnessV0KeyHash(CPubKey(witness.stack[1]).GetID()));
+        if (MakeSpan(exp) == MakeSpan(stack[0])) {
+            stats.Add(InTemplate::P2SH_P2WPKH, witness.stack[0].back() == 1, witness.stack[1].size() == 33, 0);
+            return;
+        }
+    }
+    bool p2sh_p2wsh = false;
+    if (pushonly && stack.size() == 1 && stack[0].size() == 34 && stack[0][0] == 0 && stack[0][1] == 32 && witness.stack.size() > 1) {
+        unsigned char exp[32];
+        CSHA256().Write(witness.stack.back().data(), witness.stack.back().size()).Finalize(exp);
+        if (memcmp(exp, &stack[0][2], 32) == 0) p2sh_p2wsh = true;
+    }
+    if (pushonly && witness.stack.size() == 0 && IsPureMultisig(stack, stats)) return;
+    if (pushonly && witness.stack.size() == 0 && IsEmbedMultisig(stack, stats, InTemplate::P2SH_MS)) return;
+    if (pushonly && stack.size() == 0 && IsEmbedMultisig(witness.stack, stats, InTemplate::P2WSH_MS)) return;
+    if (p2sh_p2wsh && IsEmbedMultisig(witness.stack, stats, InTemplate::P2SH_P2WSH_MS)) return;
+    if (p2sh_p2wsh) {
+        stats.Add(InTemplate::P2SH_P2WSH_OTHER, true, true, std::min<size_t>(witness.stack.size() - 1, 999));
+        return;
+    }
+    if (witness.stack.size() == 0) {
+        stats.Add(InTemplate::NONWIT_OTHER, true, true, std::min<size_t>(scriptSig.size(), 999));
+        return;
+    }
+    if (stack.size() == 0) {
+        stats.Add(InTemplate::WIT_OTHER, true, true, std::min<size_t>(witness.stack.size(), 999));
+        return;
+    }
+    stats.Add(InTemplate::P2SH_P2UW, true, true, std::min<size_t>(witness.stack.size(), 999));
 }

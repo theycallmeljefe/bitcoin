@@ -7,6 +7,7 @@
 
 #include <type_traits>
 #include <cstddef>
+#include <algorithm>
 
 /** A Span is an object that can refer to a contiguous sequence of objects.
  *
@@ -29,6 +30,8 @@ public:
     constexpr C& operator[](std::ptrdiff_t pos) const noexcept { return m_data[pos]; }
 
     constexpr Span<C> subspan(std::ptrdiff_t offset) const noexcept { return Span<C>(m_data + offset, m_size - offset); }
+
+    constexpr bool friend operator==(const Span& a, const Span& b) { return a.size() == b.size() && std::equal(a.begin(), a.end(), b.begin()); }
 };
 
 /** Create a span to a container exposing data() and size().

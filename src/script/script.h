@@ -586,4 +586,5 @@ public:
     virtual ~CReserveScript() {}
 };
 
+
 #endif // BITCOIN_SCRIPT_SCRIPT_H
