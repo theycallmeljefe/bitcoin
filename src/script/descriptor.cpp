@@ -42,6 +42,42 @@ struct PubkeyProvider
     virtual bool ToPrivateString(const SigningProvider& arg, std::string& out) const = 0;
 };
 
+#ifdef KEY_ORIGIN_SUPPORT
+class OriginPubkeyProvider final : public PubkeyProvider
+{
+    uint32_t m_fingerprint;
+    KeyPath m_path;
+    std::unique_ptr<PubkeyProvider> m_provider;
+
+    std::string OriginString() const
+    {
+        std::string ret = strprintf("%08x", m_fingerprint);
+        for (uint32_t x : m_path) {
+            if (x >> 31) {
+                ret += strprintf("/%i'", (x << 1) >> 1);
+            } else {
+                ret += strprintf("/%i", x);
+            }
+        }
+        return ret;
+    }
+
+public:
+    OriginPubkeyProvider(uint32_t fingerprint, KeyPath path, std::unique_ptr<PubkeyProvider> provider) : m_fingerprint(fingerprint), m_path(std::move(path)), m_provider(std::move(provider)) {}
+    bool GetPubKey(int pos, const SigningProvider& arg, CPubKey& out) const override { return m_provider->GetPubKey(pos, arg, out); }
+    bool IsRange() const override { return m_provider->IsRange(); }
+    size_t GetSize() const override { return m_provider->GetSize(); }
+    std::string ToString() const override { return OriginString() + ":" + m_provider->ToString(); }
+    bool ToPrivateString(const SigningProvider& arg, std::string& ret) const override
+    {
+        std::string sub;
+        if (!m_provider->ToPrivateString(arg, sub)) return false;
+        ret = OriginString() + ":" + std::move(sub);
+        return true;
+    }
+};
+#endif
+
 /** An object representing a parsed constant public key in a descriptor. */
 class ConstPubkeyProvider final : public PubkeyProvider
 {
@@ -443,7 +479,8 @@ bool ParseKeyPath(const std::vector<Span<const char>>& split, KeyPath& out)
     return true;
 }
 
-std::unique_ptr<PubkeyProvider> ParsePubkey(const Span<const char>& sp, bool permit_uncompressed, FlatSigningProvider& out)
+/** Parse a public key that excludes origin information. */
+std::unique_ptr<PubkeyProvider> ParsePubkeyInner(const Span<const char>& sp, bool permit_uncompressed, FlatSigningProvider& out)
 {
     auto split = Split(sp, '/');
     std::string str(split[0].begin(), split[0].end());
@@ -478,6 +515,29 @@ std::unique_ptr<PubkeyProvider> ParsePubkey(const Span<const char>& sp, bool per
         out.keys.emplace(extpubkey.pubkey.GetID(), extkey.key);
     }
     return MakeUnique<BIP32PubkeyProvider>(extpubkey, std::move(path), type);
+}
+
+/** Parse a public key including origin information (if enabled). */
+std::unique_ptr<PubkeyProvider> ParsePubkey(const Span<const char>& sp, bool permit_uncompressed, FlatSigningProvider& out)
+{
+    auto colon_split = Split(sp, ':');
+    if (colon_split.size() > 2) return nullptr;
+    if (colon_split.size() == 1) return ParsePubkeyInner(colon_split[0], permit_uncompressed, out);
+#ifdef KEY_ORIGIN_SUPPORT
+    auto slash_split = Split(colon_split[0], '/');
+    if (slash_split[0].size() != 8) return nullptr;
+    std::string fpr_hex = std::string(slash_split[0].begin(), slash_split[0].end());
+    if (!IsHex(fpr_hex)) return nullptr;
+    auto fpr_bytes = ParseHex(fpr_hex);
+    uint32_t fpr = ReadBE32(fpr_bytes.data());
+    KeyPath path;
+    if (!ParseKeyPath(slash_split, path)) return nullptr;
+    auto provider = ParsePubkeyInner(colon_split[1], permit_uncompressed, out);
+    if (!provider) return nullptr;
+    return MakeUnique<OriginPubkeyProvider>(fpr, std::move(path), std::move(provider));
+#else
+    return nullptr;
+#endif
 }
 
 /** Parse a script in a particular context. */
