@@ -90,6 +90,7 @@ enum class DeriveType {
 class BIP32PubkeyProvider final : public PubkeyProvider
 {
     CExtPubKey m_extkey;
+    CExtPubKey m_bottom_extkey; //< Extended public key at the bottom of the chain (not including /*), only for unhardened derivations
     KeyPath m_path;
     DeriveType m_derive;
 
@@ -115,7 +116,15 @@ class BIP32PubkeyProvider final : public PubkeyProvider
     }
 
 public:
-    BIP32PubkeyProvider(const CExtPubKey& extkey, KeyPath path, DeriveType derive) : m_extkey(extkey), m_path(std::move(path)), m_derive(derive) {}
+    BIP32PubkeyProvider(const CExtPubKey& extkey, KeyPath path, DeriveType derive) : m_extkey(extkey), m_path(std::move(path)), m_derive(derive)
+    {
+        if (!IsHardened()) {
+            m_bottom_extkey = m_extkey;
+            for (const auto entry : m_path) {
+                m_bottom_extkey.Derive(m_bottom_extkey, entry);
+            }
+        }
+    }
     bool IsRange() const override { return m_derive != DeriveType::NO; }
     size_t GetSize() const override { return 33; }
     bool GetPubKey(int pos, const SigningProvider& arg, CPubKey& out) const override
@@ -131,11 +140,7 @@ public:
             }
             out = key.Neuter().pubkey;
         } else {
-            // TODO: optimize by caching
-            CExtPubKey key = m_extkey;
-            for (auto entry : m_path) {
-                key.Derive(key, entry);
-            }
+            CExtPubKey key = m_bottom_extkey;
             if (IsRange()) {
                 key.Derive(key, pos);
             }
