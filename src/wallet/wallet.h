@@ -278,6 +278,9 @@ public:
 //Get the marginal bytes of spending the specified output
 int CalculateMaximumSignedInputSize(const CTxOut& txout, const CWallet* pwallet);
 
+//Get the marginal bytes of spending the specified output
+int CalculateMaximumSignedInputWeight(const CTxOut& txout, const CWallet* pwallet);
+
 /**
  * A transaction with a bunch of additional info that only the owner cares about.
  * It includes any unrecorded transactions needed to link it back to the block chain.
@@ -466,6 +469,12 @@ public:
         return CalculateMaximumSignedInputSize(tx->vout[out], pwallet);
     }
 
+    // Get the marginal bytes if spending the specified output from this transaction
+    int GetSpendWeight(unsigned int out) const
+    {
+        return CalculateMaximumSignedInputWeight(tx->vout[out], pwallet);
+    }
+
     void GetAmounts(std::list<COutputEntry>& listReceived,
                     std::list<COutputEntry>& listSent, CAmount& nFee, std::string& strSentAccount, const isminefilter& filter) const;
 
@@ -500,6 +509,7 @@ public:
 
     /** Pre-computed estimated size of this output as a fully-signed input in a transaction. Can be -1 if it could not be calculated */
     int nInputBytes;
+    int input_weight{-1};
 
     /** Whether we have the private keys to spend this output */
     bool fSpendable;
@@ -521,6 +531,7 @@ public:
         // Failure will keep this value -1
         if (fSpendable && tx) {
             nInputBytes = tx->GetSpendSize(i);
+            input_weight = tx->GetSpendWeight(i);
         }
     }
 
@@ -528,7 +539,7 @@ public:
 
     inline CInputCoin GetInputCoin() const
     {
-        return CInputCoin(tx->tx, i, nInputBytes);
+        return CInputCoin(tx->tx, i, nInputBytes, input_weight);
     }
 };
 

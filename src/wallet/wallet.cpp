@@ -1613,6 +1613,18 @@ int CalculateMaximumSignedInputSize(const CTxOut& txout, const CWallet* wallet)
     return GetVirtualTransactionInputSize(txn.vin[0]);
 }
 
+int CalculateMaximumSignedInputWeight(const CTxOut& txout, const CWallet* wallet)
+{
+    CMutableTransaction txn;
+    txn.vin.push_back(CTxIn(COutPoint()));
+    if (!wallet->DummySignInput(txn.vin[0], txout)) {
+        // This should never happen, because IsAllFromMe(ISMINE_SPENDABLE)
+        // implies that we can sign for every input.
+        return -1;
+    }
+    return GetTransactionInputWeight(txn.vin[0]);
+}
+
 void CWalletTx::GetAmounts(std::list<COutputEntry>& listReceived,
                            std::list<COutputEntry>& listSent, CAmount& nFee, std::string& strSentAccount, const isminefilter& filter) const
 {
