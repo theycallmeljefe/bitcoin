@@ -1566,6 +1566,7 @@ bool CWallet::DummySignTx(CMutableTransaction &txNew, const std::vector<CTxOut> 
         if (!DummySignInput(txNew.vin[nIn], txout)) {
             return false;
         }
+        //fprintf(stderr, "DummySign: size=%i weight=%i\n", (int)GetVirtualTransactionInputSize(txNew.vin[nIn]), (int)GetTransactionInputWeight(txNew.vin[nIn]));
 
         nIn++;
     }
@@ -1598,6 +1599,7 @@ int64_t CalculateMaximumSignedTxSize(const CTransaction &tx, const CWallet *wall
         // implies that we can sign for every input.
         return -1;
     }
+    //fprintf(stderr, "CalculateMaximumSignedtxSigned: wieght=%i size=%i\n", (int)GetTransactionWeight(txNew), (int)GetVirtualTransactionSize(txNew));
     return GetVirtualTransactionSize(txNew);
 }
 
@@ -1613,16 +1615,16 @@ int CalculateMaximumSignedInputSize(const CTxOut& txout, const CWallet* wallet)
     return GetVirtualTransactionInputSize(txn.vin[0]);
 }
 
-int CalculateMaximumSignedInputWeight(const CTxOut& txout, const CWallet* wallet)
+std::pair<int64_t,int64_t> CalculateMaximumSignedInputWeights(const CTxOut& txout, const CWallet* wallet)
 {
     CMutableTransaction txn;
     txn.vin.push_back(CTxIn(COutPoint()));
     if (!wallet->DummySignInput(txn.vin[0], txout)) {
         // This should never happen, because IsAllFromMe(ISMINE_SPENDABLE)
         // implies that we can sign for every input.
-        return -1;
+        return std::pair<int64_t,int64_t>{-1,-1};
     }
-    return GetTransactionInputWeight(txn.vin[0]);
+    return GetTransactionInputWeights(txn.vin[0]);
 }
 
 void CWalletTx::GetAmounts(std::list<COutputEntry>& listReceived,
@@ -2889,15 +2891,27 @@ bool CWallet::CreateTransaction(const std::vector<CRecipient>& vecSend, CTransac
 
                 // Dummy fill vin for maximum size estimation
                 //
+                int64_t base_weight = GetTransactionWeight(txNew), witness_weight = 2;
+                bool is_witness = false;
                 for (const auto& coin : setCoins) {
+                    assert(coin.m_input_weights.first != -1);
+                    assert(coin.m_input_weights.second != -1);
+                    //fprintf(stderr, "Coin with input weight %i,%i\n", (int)coin.m_input_weights.first, (int)coin.m_input_weights.second);
+                    base_weight += coin.m_input_weights.first;
+                    witness_weight += coin.m_input_weights.second;
+                    if (coin.m_input_weights.second != 1) is_witness = true;
                     txNew.vin.push_back(CTxIn(coin.outpoint,CScript()));
                 }
+                if (txNew.vin.size() >= 253) base_weight += 8;
+                if (is_witness) base_weight += witness_weight;
 
                 nBytes = CalculateMaximumSignedTxSize(txNew, this);
                 if (nBytes < 0) {
                     strFailReason = _("Signing transaction failed");
                     return false;
                 }
+                //fprintf(stderr, "%snBytes = %i, weight=%i\n", (base_weight + 3) / 4 != nBytes ? "BADBADBADAAARG " : "", (int)nBytes, (int)base_weight);
+                assert((base_weight + 3) / 4 == nBytes);
 
                 nFeeNeeded = GetMinimumFee(*this, nBytes, coin_control, ::mempool, ::feeEstimator, &feeCalc);
                 if (feeCalc.reason == FeeReason::FALLBACK && !m_allow_fallback_fee) {

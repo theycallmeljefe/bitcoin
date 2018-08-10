@@ -104,7 +104,12 @@ static inline int64_t GetBlockWeight(const CBlock& block)
 static inline int64_t GetTransactionInputWeight(const CTxIn& txin)
 {
     // scriptWitness size is added here because witnesses and txins are split up in segwit serialization.
-    return ::GetSerializeSize(txin, SER_NETWORK, PROTOCOL_VERSION | SERIALIZE_TRANSACTION_NO_WITNESS) * (WITNESS_SCALE_FACTOR - 1) + ::GetSerializeSize(txin, SER_NETWORK, PROTOCOL_VERSION) + ::GetSerializeSize(txin.scriptWitness.stack, SER_NETWORK, PROTOCOL_VERSION);
+    return ::GetSerializeSize(txin, SER_NETWORK, PROTOCOL_VERSION) * WITNESS_SCALE_FACTOR + ::GetSerializeSize(txin.scriptWitness.stack, SER_NETWORK, PROTOCOL_VERSION);
+}
+static inline std::pair<int64_t,int64_t> GetTransactionInputWeights(const CTxIn& txin)
+{
+    // scriptWitness size is added here because witnesses and txins are split up in segwit serialization.
+    return std::pair<int64_t,int64_t>(::GetSerializeSize(txin, SER_NETWORK, PROTOCOL_VERSION) * WITNESS_SCALE_FACTOR, GetSerializeSize(txin.scriptWitness.stack, SER_NETWORK, PROTOCOL_VERSION));
 }
 
 #endif // BITCOIN_CONSENSUS_VALIDATION_H
